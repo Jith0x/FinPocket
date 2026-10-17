@@ -5,6 +5,17 @@ import { config } from '../config/app_config.js';
 const router = Router();
 
 /**
+ * 0. GET /health (Root health check)
+ */
+router.get('/', (_req: Request, res: Response) => {
+  res.json({
+    status: 'OK',
+    environment: config.environment,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * 1. GET /health/live (Kubernetes / container liveness check)
  */
 router.get('/live', (_req: Request, res: Response) => {
