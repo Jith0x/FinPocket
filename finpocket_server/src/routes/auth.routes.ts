@@ -263,6 +263,13 @@ router.post('/login', async (req, res: Response): Promise<void> => {
     // Success -> Clear failed attempts
     loginAttempts.delete(lowerEmail);
 
+    // Phase D RLS: bind THIS request's transaction to the authenticated user
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
+      scope.userId = user.id;
+    }
+
     // Device tracking
     const deviceId = `dev_${uuidv4().substring(0, 8)}`;
     const dName = deviceName || 'Android Mobile Client';
@@ -318,6 +325,13 @@ router.post('/refresh', async (req, res: Response): Promise<void> => {
     if (!session) {
       res.status(401).json({ error: 'Invalid refresh token.' });
       return;
+    }
+
+    // Phase D RLS: bind session user context before updating sessions/audits
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [session.user_id]);
+      scope.userId = session.user_id;
     }
 
     // Reuse Detection: If session was already revoked, someone is trying to reuse a rotated/revoked token!
@@ -515,6 +529,13 @@ router.post('/reset-password', async (req, res: Response): Promise<void> => {
     if (!targetUserId) {
       res.status(400).json({ error: 'Invalid or expired password reset verification code.' });
       return;
+    }
+
+    // Phase D RLS: bind target user context before updating sessions/audits
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [targetUserId]);
+      scope.userId = targetUserId;
     }
 
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
@@ -847,6 +868,12 @@ router.post('/google', async (req, res: Response): Promise<void> => {
     }
 
     // 3. Issue FinPocket device, session, and JWT tokens
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
+      scope.userId = user.id;
+    }
+
     const deviceId = `dev_${uuidv4().substring(0, 8)}`;
     await runQuery(`
       INSERT INTO devices (id, user_id, device_name, ip_address)
@@ -1015,6 +1042,12 @@ router.post('/meta', async (req, res: Response): Promise<void> => {
       );
     }
 
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
+      scope.userId = user.id;
+    }
+
     const deviceId = `dev_${uuidv4().substring(0, 8)}`;
     await runQuery(`
       INSERT INTO devices (id, user_id, device_name, ip_address)
@@ -1179,6 +1212,12 @@ router.post('/apple', async (req, res: Response): Promise<void> => {
         'UPDATE user_identities SET last_login_at = CURRENT_TIMESTAMP WHERE provider = ? AND provider_subject = ?',
         ['apple', verifiedAppleUser.sub]
       );
+    }
+
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [user.id]);
+      scope.userId = user.id;
     }
 
     const deviceId = `dev_${uuidv4().substring(0, 8)}`;

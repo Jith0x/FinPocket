@@ -21,7 +21,7 @@ interface VaultPageProps {
   onRequestPin: (onVerified: () => void) => void;
 }
 
-const docTypes = ['Aadhaar', 'PAN Card', 'Driving Licence', 'Passport', 'Voter ID', 'Insurance', 'Education', 'Bank', 'Other'] as const;
+const docTypes = ['Aadhaar', 'PAN Card', 'Driving Licence', 'Passport', 'Voter ID', 'Salary Slip', 'ITC Document', 'Insurance', 'Education', 'Bank', 'Other'] as const;
 
 export const VaultPage: React.FC<VaultPageProps> = ({ onRequestPin }) => {
   const { documents, expiringSoonDocuments, uploadDocument, deleteDocument } = useVault();

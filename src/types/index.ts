@@ -111,7 +111,7 @@ export interface DocumentItem {
     id: string;
     userId: string;
     name: string;
-    documentType: 'Aadhaar' | 'PAN Card' | 'Driving Licence' | 'Passport' | 'Voter ID' | 'Insurance' | 'Education' | 'Bank' | 'Other';
+    documentType: 'Aadhaar' | 'PAN Card' | 'Driving Licence' | 'Passport' | 'Voter ID' | 'Salary Slip' | 'ITC Document' | 'Insurance' | 'Education' | 'Bank' | 'Other';
     maskedNumber?: string;
     issueDate?: string;
     expiryDate?: string;

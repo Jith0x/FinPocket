@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getQuery, runQuery } from '../config/database';
 import { AppConfig, config } from '../config/app_config';
+import { currentScope } from '../config/db/context.js';
 
 export interface VerifiedGoogleUser {
   sub: string;
@@ -60,11 +61,15 @@ export class GoogleAuthService {
 
     try {
       const allowedAudiences = this.getAllowedAudiences();
-      const verifyOpts: { idToken: string; audience?: string | string[] } = { idToken };
-      if (allowedAudiences.length > 0) {
-        verifyOpts.audience = allowedAudiences;
+      if (allowedAudiences.length === 0) {
+        // Fail closed: without a configured audience the server cannot tell a
+        // genuine Google token for OUR app from one minted for any other app.
+        throw new Error('Google Sign-In is not configured on this server (set GOOGLE_CLIENT_ID).');
       }
-      const ticket = await this.oauthClient.verifyIdToken(verifyOpts);
+      const ticket = await this.oauthClient.verifyIdToken({
+        idToken,
+        audience: allowedAudiences,
+      });
 
       const payload: TokenPayload | undefined = ticket.getPayload();
       if (!payload) {
@@ -202,6 +207,13 @@ export class GoogleAuthService {
 
     // Create the identity link
     await this.linkGoogleAccount(userId, googleUser.sub, googleUser.email);
+
+    // Phase D RLS: bind new identity context before writing emergency_funds
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId]);
+      scope.userId = userId;
+    }
 
     // No fake bank account is created on signup — a new user starts with zero
     // accounts and a ₹0 balance until they connect a real bank (AA consent or

@@ -68,6 +68,7 @@ void main() {
 
       await tester.enterText(find.byKey(const Key('login_email_field')), 'invalid-email-format');
       await tester.enterText(find.byKey(const Key('login_password_field')), 'secret123');
+      await tester.ensureVisible(find.byKey(const Key('login_submit_button')));
       await tester.tap(find.byKey(const Key('login_submit_button')));
       await tester.pumpAndSettle();
 
@@ -84,6 +85,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byKey(const Key('login_email_field')), 'user@finpocket.com');
+      await tester.ensureVisible(find.byKey(const Key('login_submit_button')));
       await tester.tap(find.byKey(const Key('login_submit_button')));
       await tester.pumpAndSettle();
 

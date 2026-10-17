@@ -227,15 +227,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               err.contains('OAuth') ||
               err.contains('clientConfigurationError') ||
               err.contains('serverClientId') ||
-              err.contains('requires an active OAuth') ||
-              err.contains('GOOGLE_CLIENT_ID') ||
-              err.contains('Google Sign-In is not configured') ||
-              err.contains('Google token verification failed') ||
-              err.toLowerCase().contains('google')) {
-            state.clearAuthError();
-            setState(() {
-              _localError = null;
-            });
+              err.contains('requires an active OAuth')) {
             _showGoogleSetupDialog(err);
           } else {
             setState(() {

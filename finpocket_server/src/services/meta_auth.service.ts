@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getQuery, runQuery } from '../config/database.js';
 import { config } from '../config/app_config.js';
+import { currentScope } from '../config/db/context.js';
 
 export interface VerifiedMetaUser {
   sub: string;
@@ -146,6 +147,13 @@ export class MetaAuthService {
     );
 
     await this.linkMetaAccount(userId, metaUser.sub, metaUser.email);
+
+    // Phase D RLS: bind new identity context before writing emergency_funds
+    const scope = currentScope();
+    if (scope) {
+      await scope.client.query(`SELECT set_config('app.current_user_id', $1, true)`, [userId]);
+      scope.userId = userId;
+    }
 
     // No fake bank account is created on signup — a new user starts with zero
     // accounts and a ₹0 balance until they connect a real bank (AA consent or
