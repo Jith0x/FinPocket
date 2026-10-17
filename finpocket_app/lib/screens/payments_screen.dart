@@ -247,6 +247,138 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
     }
     if (!mounted) return;
 
+    // ─── User Pay & Spending Limit Guard ─────────────────────────────────
+    if (state.userPaySpendLimit != null && state.wouldExceedPaySpendLimit(amount)) {
+      final limit = state.userPaySpendLimit!;
+      final currentSpend = state.thisMonthSpent;
+      final newTotal = currentSpend + amount;
+      final exceededBy = newTotal - limit;
+
+      final willProceed = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(
+            children: [
+              Icon(Icons.report_problem_rounded, color: Color(0xFFEF4444), size: 26),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '⚠️ Budget Limit Exceeded!',
+                  style: TextStyle(
+                    color: Color(0xFFEF4444),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0x33EF4444),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x66EF4444)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Kindly stop! You are exceeding your set budget limit.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFCA5A5),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Your spending limit: ₹${limit.toStringAsFixed(0)}\n'
+                      '• Spent so far this month: ₹${currentSpend.toStringAsFixed(0)}\n'
+                      '• This payment: ₹${amount.toStringAsFixed(0)}\n'
+                      '• Total after this payment: ₹${newTotal.toStringAsFixed(0)}\n'
+                      '• Exceeding limit by: ₹${exceededBy.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.white, height: 1.4),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (state.surplusForOtherSections > 0)
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0x2214B8A6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0x4414B8A6)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.savings_outlined, color: AppTheme.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'You earmarked ₹${state.surplusForOtherSections.toStringAsFixed(0)} to transfer to Savings/Emergency Fund. Exceeding your spend limit will disrupt your savings plan!',
+                          style: const TextStyle(fontSize: 11.5, color: Color(0xFF99F6E4)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('🛑 Stop / Cancel Payment', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            if (state.surplusForOtherSections > 0)
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx, false);
+                  _showTransferSurplusDialog(state);
+                },
+                child: const Text('Transfer to Savings', style: TextStyle(color: AppTheme.primary)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Proceed Anyway', style: TextStyle(color: Colors.white54, fontSize: 11)),
+            ),
+          ],
+        ),
+      );
+
+      // Record in notification center
+      state.addNotification(
+        AppNotification(
+          id: 'pay_limit_${DateTime.now().millisecondsSinceEpoch}',
+          title: '🚨 Budget Spend Limit Exceeded',
+          message:
+              'Attempted ₹${amount.toStringAsFixed(0)} payment exceeds your set spending limit of ₹${limit.toStringAsFixed(0)} by ₹${exceededBy.toStringAsFixed(0)}.',
+          type: NotificationType.budgetAlert,
+          timestamp: DateTime.now(),
+          data: {'amount': amount, 'limit': limit, 'exceededBy': exceededBy},
+        ),
+        overlayContext: mounted ? context : null,
+      );
+
+      if (willProceed != true) return;
+    }
+    if (!mounted) return;
+
     // ─── Overspending Consequence Alert ───────────────────────────────────────
     if (amount > state.totalAvailableBalance) {
       final deficit = amount - state.totalAvailableBalance;
@@ -1734,6 +1866,560 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
     );
   }
 
+  void _showSetPayBudgetDialog(AppState state) {
+    final incomeCtrl = TextEditingController(
+      text: state.userPayIncome != null ? state.userPayIncome!.toStringAsFixed(0) : '',
+    );
+    final limitCtrl = TextEditingController(
+      text: state.userPaySpendLimit != null ? state.userPaySpendLimit!.toStringAsFixed(0) : '',
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final inc = double.tryParse(incomeCtrl.text.trim()) ?? 0.0;
+            final lim = double.tryParse(limitCtrl.text.trim()) ?? 0.0;
+            final surplus = inc > lim ? inc - lim : 0.0;
+            final spendPct = inc > 0 ? (lim / inc * 100).clamp(0, 100).toStringAsFixed(0) : '0';
+            final savePct = inc > 0 ? (surplus / inc * 100).clamp(0, 100).toStringAsFixed(0) : '0';
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Row(
+                      children: [
+                        Icon(Icons.tune_rounded, color: AppTheme.primary, size: 22),
+                        SizedBox(width: 8),
+                        Text(
+                          'Set Pay & Spending Limit',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Decide how much you want to spend from your pay, and reserve the remainder to transfer to Savings & other sections.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8), height: 1.3),
+                    ),
+                    const SizedBox(height: 18),
+                    // Monthly Pay / Income field
+                    TextField(
+                      controller: incomeCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'Monthly Pay / Income (₹)',
+                        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        prefixText: '₹ ',
+                        prefixStyle: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF334155)),
+                        ),
+                      ),
+                      onChanged: (_) => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 14),
+                    // Desired Spending Limit field
+                    TextField(
+                      controller: limitCtrl,
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                      decoration: InputDecoration(
+                        labelText: 'Maximum Spend Limit (₹)',
+                        labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        prefixText: '₹ ',
+                        prefixStyle: const TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.bold),
+                        hintText: 'e.g. 15000',
+                        hintStyle: const TextStyle(color: Colors.white30),
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: Color(0xFF334155)),
+                        ),
+                      ),
+                      onChanged: (_) => setSheetState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    // Visual Breakdown Box
+                    if (inc > 0 || lim > 0)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF334155)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFF59E0B),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Text('Allowed Spend:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                  ],
+                                ),
+                                Text(
+                                  '₹${lim.toStringAsFixed(0)} ($spendPct%)',
+                                  style: const TextStyle(color: Color(0xFFF59E0B), fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: AppTheme.primary,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Text('Transfer to Savings / Others:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                  ],
+                                ),
+                                Text(
+                                  '₹${surplus.toStringAsFixed(0)} ($savePct%)',
+                                  style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    // Action Buttons
+                    Row(
+                      children: [
+                        if (state.userPaySpendLimit != null)
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white60,
+                                side: const BorderSide(color: Color(0xFF334155)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: () async {
+                                await state.clearUserPayBudget();
+                                if (ctx.mounted) Navigator.pop(ctx);
+                              },
+                              child: const Text('Clear Limit'),
+                            ),
+                          ),
+                        if (state.userPaySpendLimit != null) const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            onPressed: () async {
+                              final newInc = double.tryParse(incomeCtrl.text.trim()) ?? 0.0;
+                              final newLim = double.tryParse(limitCtrl.text.trim()) ?? 0.0;
+                              if (newLim <= 0) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter a spending limit greater than zero.')),
+                                );
+                                return;
+                              }
+                              await state.setUserPayBudget(income: newInc, spendLimit: newLim);
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Spending limit set to ₹${newLim.toStringAsFixed(0)}/month!'),
+                                    backgroundColor: const Color(0xFF10B981),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text('Save & Activate Limit', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showTransferSurplusDialog(AppState state) {
+    final surplus = state.surplusForOtherSections;
+    if (surplus <= 0) return;
+
+    final transferCtrl = TextEditingController(text: surplus.toStringAsFixed(0));
+    String target = 'emergency';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(
+            children: [
+              Icon(Icons.savings_rounded, color: AppTheme.primary, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text('Transfer Pay Surplus', style: TextStyle(color: Colors.white, fontSize: 16)),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You have ₹${surplus.toStringAsFixed(0)} set aside from your pay for savings.',
+                style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: transferCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Amount to Transfer (₹)',
+                  labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                  prefixText: '₹ ',
+                  prefixStyle: const TextStyle(color: AppTheme.primary),
+                  filled: true,
+                  fillColor: const Color(0xFF1E293B),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text('Destination:', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  ChoiceChip(
+                    label: const Text('Emergency Shield', style: TextStyle(fontSize: 11)),
+                    selected: target == 'emergency',
+                    selectedColor: AppTheme.primary,
+                    checkmarkColor: Colors.white,
+                    backgroundColor: const Color(0xFF1E293B),
+                    onSelected: (val) => setDlgState(() => target = 'emergency'),
+                  ),
+                  const SizedBox(width: 8),
+                  ChoiceChip(
+                    label: const Text('Savings Goals', style: TextStyle(fontSize: 11)),
+                    selected: target == 'savings',
+                    selectedColor: AppTheme.primary,
+                    checkmarkColor: Colors.white,
+                    backgroundColor: const Color(0xFF1E293B),
+                    onSelected: (val) => setDlgState(() => target = 'savings'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final amt = double.tryParse(transferCtrl.text.trim()) ?? 0.0;
+                if (amt <= 0) return;
+                Navigator.pop(ctx);
+                if (target == 'emergency') {
+                  final res = await state.depositEmergencyFund(amt, overlayContext: mounted ? context : null);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(res['message'] ?? 'Transferred ₹${amt.toStringAsFixed(0)} to Emergency Fund!'),
+                        backgroundColor: const Color(0xFF10B981),
+                      ),
+                    );
+                  }
+                } else {
+                  if (state.savingsGoals.isNotEmpty) {
+                    state.depositToSavingsGoal(state.savingsGoals.first.id, amt);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Deposited ₹${amt.toStringAsFixed(0)} to ${state.savingsGoals.first.title}!'),
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                      );
+                    }
+                  } else {
+                    final res = await state.depositEmergencyFund(amt, overlayContext: mounted ? context : null);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(res['message'] ?? 'Transferred ₹${amt.toStringAsFixed(0)} to Emergency Fund!'),
+                          backgroundColor: const Color(0xFF10B981),
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              child: const Text('Confirm Transfer'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaySpendLimitCard(AppState state, bool isDark) {
+    if (state.userPaySpendLimit == null) {
+      return InkWell(
+        onTap: () => _showSetPayBudgetDialog(state),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.shield_moon_outlined, color: AppTheme.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Set Pay Spending Limit',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Limit your spending and allocate the rest to savings.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Color(0xFF94A3B8), size: 20),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final limit = state.userPaySpendLimit!;
+    final spent = state.thisMonthSpent;
+    final remaining = state.remainingPaySpendBudget;
+    final pct = state.paySpendUsagePercent;
+    final isExceeded = spent > limit;
+    final isNearLimit = pct >= 0.8 && !isExceeded;
+
+    final Color statusColor = isExceeded
+        ? const Color(0xFFEF4444)
+        : isNearLimit
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF10B981);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.bgCardDark : AppTheme.bgCardLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: statusColor.withOpacity(0.35),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isExceeded ? Icons.warning_amber_rounded : Icons.account_balance_wallet_outlined,
+                    color: statusColor,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Pay Spending Budget',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: () => _showSetPayBudgetDialog(state),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Edit',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(Icons.edit_outlined, size: 13, color: AppTheme.primary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 6,
+              backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Spent ₹${spent.toStringAsFixed(0)} of ₹${limit.toStringAsFixed(0)} limit',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                isExceeded
+                    ? 'Exceeded by ₹${(spent - limit).toStringAsFixed(0)}'
+                    : '₹${remaining.toStringAsFixed(0)} remaining',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: statusColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          if (state.surplusForOtherSections > 0) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Savings surplus: ₹${state.surplusForOtherSections.toStringAsFixed(0)}',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                  ),
+                  InkWell(
+                    onTap: () => _showTransferSurplusDialog(state),
+                    child: const Text(
+                      'Transfer Now →',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = Provider.of<AppState>(context);
@@ -1803,6 +2489,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
               afterBalance: afterBalance,
               afterSafe: afterSafe,
             ),
+            const SizedBox(height: 14),
+
+            // Pay & Spending Budget Allocation Card
+            _buildPaySpendLimitCard(state, isDark),
             const SizedBox(height: 14),
 
             // Quick Send Box (Matches Web quick action form)

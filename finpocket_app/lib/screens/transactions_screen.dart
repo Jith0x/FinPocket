@@ -347,8 +347,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 } else {
                   // Download-only: save to app documents AND Downloads.
                   await FileShareService.downloadToDownloads(file.path);
+                  final fileName = file.path.split(RegExp(r'[/\\]')).last;
                   snack(
-                      'Statement saved (${rows.length} rows) to ${file.path}');
+                      '✅ Statement saved to your phone\'s Downloads folder! ($fileName)');
                 }
               } catch (e) {
                 snack('Could not generate the statement: $e', ok: false);

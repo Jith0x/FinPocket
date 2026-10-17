@@ -370,6 +370,9 @@ class AppState extends ChangeNotifier {
         _isSoundboxEnabled = prefs.getBool('fp_soundbox_enabled') ?? true;
         // Restore Child Care (payment-blocking) safety mode across restarts.
         _childCare.enabled = prefs.getBool('fp_childcare_enabled') ?? false;
+        // User pay budget & spending limit
+        _userPayIncome = prefs.getDouble(_prefPayIncomeKey);
+        _userPaySpendLimit = prefs.getDouble(_prefPaySpendLimitKey);
         await loadCreditCardStatements();
         await loadGamificationData();
         // Opening the app counts as today's check-in for the daily streak.
@@ -1616,6 +1619,79 @@ class AppState extends ChangeNotifier {
 
   double get totalSavings => _emergencyFund.currentAmount + _savingsGoals.fold(0.0, (sum, g) => sum + g.currentAmount);
 
+  // ─── User-Configured Pay Spending Limit & Allocation ───────────────────
+  static const String _prefPayIncomeKey = 'finpocket_user_pay_income_v1';
+  static const String _prefPaySpendLimitKey = 'finpocket_user_pay_spend_limit_v1';
+
+  double? _userPayIncome;
+  double? _userPaySpendLimit;
+
+  double? get userPayIncome => _userPayIncome;
+  double? get userPaySpendLimit => _userPaySpendLimit;
+
+  /// Amount designated to be transferred to other sections (Savings, Emergency Fund, Vault, etc.)
+  double get surplusForOtherSections {
+    if (_userPayIncome != null && _userPaySpendLimit != null) {
+      final surplus = _userPayIncome! - _userPaySpendLimit!;
+      return surplus > 0 ? surplus : 0.0;
+    }
+    return 0.0;
+  }
+
+  /// Whether paying [amount] would exceed the user's configured pay spending limit for this month
+  bool wouldExceedPaySpendLimit(double amount) {
+    if (_userPaySpendLimit == null || _userPaySpendLimit! <= 0) return false;
+    return (thisMonthSpent + amount) > _userPaySpendLimit!;
+  }
+
+  /// Remaining amount the user can spend this month before hitting their pay limit
+  double get remainingPaySpendBudget {
+    if (_userPaySpendLimit == null) return 0.0;
+    final rem = _userPaySpendLimit! - thisMonthSpent;
+    return rem > 0 ? rem : 0.0;
+  }
+
+  /// Percentage of the pay spending limit that has been used up so far this month
+  double get paySpendUsagePercent {
+    if (_userPaySpendLimit == null || _userPaySpendLimit! <= 0) return 0.0;
+    return (thisMonthSpent / _userPaySpendLimit!).clamp(0.0, 1.0);
+  }
+
+  Future<void> setUserPayBudget({
+    required double income,
+    required double spendLimit,
+  }) async {
+    _userPayIncome = income > 0 ? income : null;
+    _userPaySpendLimit = spendLimit > 0 ? spendLimit : null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_userPayIncome != null) {
+        await prefs.setDouble(_prefPayIncomeKey, _userPayIncome!);
+      } else {
+        await prefs.remove(_prefPayIncomeKey);
+      }
+      if (_userPaySpendLimit != null) {
+        await prefs.setDouble(_prefPaySpendLimitKey, _userPaySpendLimit!);
+      } else {
+        await prefs.remove(_prefPaySpendLimitKey);
+      }
+    } catch (e) {
+      debugPrint('[AppState] Failed persisting user pay budget: $e');
+    }
+    notifyListeners();
+  }
+
+  Future<void> clearUserPayBudget() async {
+    _userPayIncome = null;
+    _userPaySpendLimit = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefPayIncomeKey);
+      await prefs.remove(_prefPaySpendLimitKey);
+    } catch (_) {}
+    notifyListeners();
+  }
+
   double get thisMonthSpent => _transactions
       .where((t) => t.type == TransactionType.EXPENSE && t.timestamp.month == DateTime.now().month && t.timestamp.year == DateTime.now().year)
       .fold(0.0, (sum, t) => sum + t.amount);
@@ -2441,6 +2517,8 @@ class AppState extends ChangeNotifier {
         'finpocket_whatsapp_number_v1',
         'fp_ghost_subscriptions',
         'finpocket_profile_onboarded_v1',
+        'finpocket_user_pay_income_v1',
+        'finpocket_user_pay_spend_limit_v1',
       ];
       for (final key in keysToRemove) {
         await prefs.remove(key);

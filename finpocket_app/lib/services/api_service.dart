@@ -79,28 +79,20 @@ class ApiService {
   // ==========================================
 
   static List<String> get _candidateHosts {
-    if (kIsWeb) return ['http://localhost:3001/api/v1'];
-    // Loopback first: on a physical device `adb reverse tcp:3001 tcp:3001`
-    // exposes the host backend over 127.0.0.1, and it is by far the most
-    // reliable path during development. 10.0.2.2 is the Android emulator's
-    // fixed host-loopback alias. Anything machine-specific (LAN IPs) belongs
-    // in --dart-define=FINPOCKET_API_HOST, never in source.
+    if (kIsWeb) return ['https://finpocket-52hh.onrender.com/api/v1', 'http://localhost:3001/api/v1'];
     return [
+      'https://finpocket-52hh.onrender.com/api/v1',
       'http://127.0.0.1:3001/api/v1',
       'http://localhost:3001/api/v1',
-      'http://192.168.1.9:3001/api/v1',
       'http://10.0.2.2:3001/api/v1',
     ];
   }
 
-  /// Automatically discover active backend host across Wi-Fi LAN, emulator & loopback
+  /// Automatically discover active backend host across cloud, Wi-Fi LAN, emulator & loopback
   static Future<String> discoverHost() async {
     if (AppConfig.isProduction || AppConfig.environment == AppEnvironment.test) {
       return AppConfig.apiBaseUrl;
     }
-    // A URL baked in at build time (shared/friend builds pointing at the
-    // deployed cloud backend) wins outright — no probing, so first launch
-    // doesn't waste seconds polling dead loopback candidates.
     if (AppConfig.apiHostOverride.isNotEmpty) return AppConfig.apiBaseUrl;
     if (AppConfig.customApiBaseUrl != null && AppConfig.customApiBaseUrl!.isNotEmpty) {
       return AppConfig.customApiBaseUrl!;
@@ -108,20 +100,15 @@ class ApiService {
 
     final saved = await SecureTokenStorage.getCustomApiUrl();
     if (saved != null && saved.isNotEmpty) {
-      AppConfig.customApiBaseUrl = saved;
-      return saved;
+      // Validate that saved URL is not a dead loopback from a previous debug session
+      if (!saved.contains('127.0.0.1') && !saved.contains('localhost') && !saved.contains('192.168.')) {
+        AppConfig.customApiBaseUrl = saved;
+        return saved;
+      }
     }
 
-    for (final host in _candidateHosts) {
-      try {
-        final res = await http.get(Uri.parse('$host/auth/google/status')).timeout(const Duration(milliseconds: 1200));
-        if (res.statusCode < 500) {
-          AppConfig.customApiBaseUrl = host;
-          await SecureTokenStorage.saveCustomApiUrl(host);
-          return host;
-        }
-      } catch (_) {}
-    }
+    // Default to the live Render cloud backend
+    AppConfig.customApiBaseUrl = AppConfig.apiBaseUrl;
     return AppConfig.apiBaseUrl;
   }
 
@@ -133,20 +120,13 @@ class ApiService {
     final payload = jsonEncode(body);
     final reqHeaders = headers ?? _headers();
 
-    // The configured backend ALWAYS leads. AppConfig.apiBaseUrl already
-    // resolves runtime override -> baked --dart-define host -> environment
-    // default, so any build that is explicitly pointed somewhere (production,
-    // staging, a release APK with FINPOCKET_API_HOST, or a runtime override)
-    // posts straight there. Previously staging builds fell through to the
-    // dev loopback probe list below, so a fresh install POSTed its auth
-    // requests to 127.0.0.1:3001 — dead on a phone — and reported
-    // "Unable to reach the FinPocket server" while the same device loaded
-    // the deployed backend fine in a browser.
+    // The configured backend ALWAYS leads.
     final explicitlyConfigured = AppConfig.isProduction ||
         AppConfig.isStaging ||
         AppConfig.environment == AppEnvironment.test ||
         AppConfig.apiHostOverride.isNotEmpty ||
-        (AppConfig.customApiBaseUrl?.isNotEmpty ?? false);
+        (AppConfig.customApiBaseUrl?.isNotEmpty ?? false) ||
+        baseUrl.startsWith('https://');
 
     if (explicitlyConfigured) {
       return await http
@@ -155,12 +135,10 @@ class ApiService {
             headers: reqHeaders,
             body: payload,
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 40));
     }
 
-    // Unconfigured dev builds: probe the local loopback candidates (adb
-    // reverse / emulator), remembering whichever one answers, then fail with
-    // the last error if none does.
+    // Unconfigured dev builds: probe the candidates (cloud first, then local loopback)
     Object? lastError;
     for (final host in _candidateHosts) {
       try {
@@ -170,7 +148,7 @@ class ApiService {
               headers: reqHeaders,
               body: payload,
             )
-            .timeout(const Duration(milliseconds: 2000));
+            .timeout(const Duration(seconds: 40));
 
         AppConfig.customApiBaseUrl = host;
         await SecureTokenStorage.saveCustomApiUrl(host);

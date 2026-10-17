@@ -95,22 +95,52 @@ class MainActivity : FlutterFragmentActivity() {
                             fileName.endsWith(".csv", ignoreCase = true) -> "text/csv"
                             else -> "application/octet-stream"
                         }
-                        val values = android.content.ContentValues().apply {
-                            put("_display_name", fileName)
-                            put("mime_type", mimeType)
-                            put("relative_path", android.os.Environment.DIRECTORY_DOWNLOADS)
-                        }
-                        val uri = contentResolver.insert(android.net.Uri.parse("content://media/external/downloads"), values)
-                        if (uri != null) {
-                            contentResolver.openOutputStream(uri)?.use { out ->
-                                srcFile.inputStream().use { input ->
-                                    input.copyTo(out)
+
+                        var savedUri: android.net.Uri? = null
+
+                        // 1. Android Q+ (API 29+): Scoped storage MediaStore Downloads
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            try {
+                                val values = android.content.ContentValues().apply {
+                                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
                                 }
-                            }
-                            result.success(uri.toString())
-                        } else {
-                            result.error("DOWNLOAD_FAILED", "Could not create download entry", null)
+                                val collection = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                                val uri = contentResolver.insert(collection, values)
+                                if (uri != null) {
+                                    contentResolver.openOutputStream(uri)?.use { out ->
+                                        srcFile.inputStream().use { input ->
+                                            input.copyTo(out)
+                                        }
+                                    }
+                                    values.clear()
+                                    values.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                                    contentResolver.update(uri, values, null, null)
+                                    savedUri = uri
+                                }
+                            } catch (_: Exception) {}
                         }
+
+                        // 2. Direct public Downloads folder fallback
+                        if (savedUri == null) {
+                            val publicDownloads = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            if (!publicDownloads.exists()) {
+                                publicDownloads.mkdirs()
+                            }
+                            val destFile = java.io.File(publicDownloads, fileName)
+                            srcFile.copyTo(destFile, overwrite = true)
+                            android.media.MediaScannerConnection.scanFile(
+                                applicationContext,
+                                arrayOf(destFile.absolutePath),
+                                arrayOf(mimeType),
+                                null
+                            )
+                            savedUri = android.net.Uri.fromFile(destFile)
+                        }
+
+                        result.success(savedUri?.toString() ?: "saved")
                     } catch (e: Exception) {
                         result.error("DOWNLOAD_FAILED", e.localizedMessage ?: "Could not save to Downloads", null)
                     }

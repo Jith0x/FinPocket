@@ -4,6 +4,7 @@ import '../../providers/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../config/app_config.dart';
 import '../../services/security_auth_service.dart';
+import '../../services/api_service.dart';
 import '../../core/storage/secure_token_storage.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
@@ -457,21 +458,74 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppTheme.danger.withOpacity(0.3)),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _localError ?? state.authError ?? '',
-                              key: const Key('auth_error_text'),
-                              style: const TextStyle(
-                                color: AppTheme.danger,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                          Row(
+                            children: [
+                              const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _localError ?? state.authError ?? '',
+                                  key: const Key('auth_error_text'),
+                                  style: const TextStyle(
+                                    color: AppTheme.danger,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if ((_localError ?? state.authError ?? '').toLowerCase().contains('server') ||
+                              (_localError ?? state.authError ?? '').toLowerCase().contains('connection')) ...[
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () async {
+                                setState(() {
+                                  _localError = 'Connecting to 24/7 cloud server...';
+                                });
+                                await ApiService.discoverHost();
+                                state.clearAuthError();
+                                setState(() {
+                                  _localError = null;
+                                });
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Connected to FinPocket Cloud Backend!'),
+                                      backgroundColor: Color(0xFF10B981),
+                                      duration: Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primary.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppTheme.primary.withOpacity(0.4)),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.refresh_rounded, size: 16, color: AppTheme.primary),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Retry Cloud Connection',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                     ),

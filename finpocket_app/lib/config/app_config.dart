@@ -73,42 +73,40 @@ class AppConfig {
 
   /// Fail-closed production check for local URLs
   static String get apiBaseUrl {
-    // 1. Runtime override (host discovery stores COMPLETE base URLs such as
-    //    `http://host:3001/api/v1`) — returned exactly as stored.
-    if (customApiBaseUrl != null && customApiBaseUrl!.isNotEmpty) {
-      if (isProduction && _isLoopbackLike(customApiBaseUrl!)) {
-        throw StateError('Production build cannot connect to localhost or internal loopback IP addresses.');
-      }
-      return customApiBaseUrl!;
-    }
-
-    // 2. Build-time override (`--dart-define=FINPOCKET_API_HOST`) wins in
-    //    EVERY environment, so release builds can point at any deployed
-    //    backend without touching source. Production still refuses loopback.
+    // 1. Build-time override (`--dart-define=FINPOCKET_API_HOST`) wins in
+    //    EVERY environment, so release builds point directly at the deployed
+    //    cloud backend without interference from stale local caches.
     if (apiHostOverride.isNotEmpty) {
       if (isProduction && _isLoopbackLike(apiHostOverride)) {
         throw StateError('Production build cannot connect to localhost or internal loopback IP addresses.');
       }
       if (apiHostOverride.startsWith('http://') || apiHostOverride.startsWith('https://')) {
-        // A full URL baked in at build time (`https://api.example.com`) is
-        // used as-is: cloud backends serve TLS on 443 rather than plain :3001.
         return '${apiHostOverride.replaceAll(RegExp(r'/+$'), '')}/api/v1';
       }
-      // Bare hostnames keep the dev convention.
       return 'http://$apiHostOverride:3001/api/v1';
     }
 
-    // 3. Environment defaults.
+    // 2. Runtime override (customApiBaseUrl) — ignore stale loopbacks in production
+    if (customApiBaseUrl != null && customApiBaseUrl!.isNotEmpty) {
+      if (isProduction && _isLoopbackLike(customApiBaseUrl!)) {
+        customApiBaseUrl = null;
+      } else {
+        return customApiBaseUrl!;
+      }
+    }
+
+    // 3. Environment defaults: Production and Staging always use the live 24/7 Render cloud backend.
     switch (environment) {
       case AppEnvironment.production:
-        return 'https://api.finpocket.com/api/v1';
       case AppEnvironment.staging:
-        return 'https://staging-api.finpocket.com/api/v1';
+        return 'https://finpocket-52hh.onrender.com/api/v1';
       case AppEnvironment.development:
       case AppEnvironment.demo:
       case AppEnvironment.test:
-        if (kIsWeb) return 'http://localhost:3001/api/v1';
-        return 'http://127.0.0.1:3001/api/v1';
+        if (kIsWeb) return 'https://finpocket-52hh.onrender.com/api/v1';
+        // On physical devices, loopback connects to the phone itself where no server runs.
+        // Defaulting to the live cloud backend ensures immediate out-of-the-box connectivity.
+        return 'https://finpocket-52hh.onrender.com/api/v1';
     }
   }
 
