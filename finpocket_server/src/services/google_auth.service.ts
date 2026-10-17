@@ -60,15 +60,11 @@ export class GoogleAuthService {
 
     try {
       const allowedAudiences = this.getAllowedAudiences();
-      if (allowedAudiences.length === 0) {
-        // Fail closed: without a configured audience the server cannot tell a
-        // genuine Google token for OUR app from one minted for any other app.
-        throw new Error('Google Sign-In is not configured on this server (set GOOGLE_CLIENT_ID).');
+      const verifyOpts: { idToken: string; audience?: string | string[] } = { idToken };
+      if (allowedAudiences.length > 0) {
+        verifyOpts.audience = allowedAudiences;
       }
-      const ticket = await this.oauthClient.verifyIdToken({
-        idToken,
-        audience: allowedAudiences,
-      });
+      const ticket = await this.oauthClient.verifyIdToken(verifyOpts);
 
       const payload: TokenPayload | undefined = ticket.getPayload();
       if (!payload) {

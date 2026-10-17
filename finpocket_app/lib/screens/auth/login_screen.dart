@@ -194,6 +194,10 @@ class _LoginScreenState extends State<LoginScreen> {
             err.contains('Google Sign-In is not configured') ||
             err.contains('Google token verification failed') ||
             err.toLowerCase().contains('google')) {
+          state.clearAuthError();
+          setState(() {
+            _localError = null;
+          });
           _showGoogleSetupDialog(err);
         } else {
           setState(() {
