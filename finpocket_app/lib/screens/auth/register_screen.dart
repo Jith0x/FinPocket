@@ -791,8 +791,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       border: Border.all(color: AppTheme.danger.withOpacity(0.3)),
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 2),
+                          child: Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -803,6 +807,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
                             ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _localError = null;
+                            });
+                            state.clearAuthError();
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.all(2.0),
+                            child: Icon(Icons.close, color: AppTheme.danger, size: 18),
                           ),
                         ),
                       ],

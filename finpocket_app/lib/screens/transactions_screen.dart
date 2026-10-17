@@ -384,19 +384,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Row(
-                            children: [
-                              Icon(Icons.description_rounded,
-                                  color: AppTheme.primary, size: 24),
-                              SizedBox(width: 8),
-                              Text(
-                                'Download Statement',
-                                style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white),
-                              ),
-                            ],
+                          const Expanded(
+                            child: Row(
+                              children: [
+                                Icon(Icons.description_rounded,
+                                    color: AppTheme.primary, size: 24),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Download Statement',
+                                    style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                           IconButton(
                             icon: const Icon(Icons.close, color: Colors.white70),

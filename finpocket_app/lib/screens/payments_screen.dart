@@ -2069,8 +2069,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
                             onPressed: () async {
                               final newInc = double.tryParse(incomeCtrl.text.trim()) ?? 0.0;
                               final newLim = double.tryParse(limitCtrl.text.trim()) ?? 0.0;
+                              final messenger = ScaffoldMessenger.of(context);
                               if (newLim <= 0) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   const SnackBar(content: Text('Please enter a spending limit greater than zero.')),
                                 );
                                 return;
@@ -2078,7 +2079,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
                               await state.setUserPayBudget(income: newInc, spendLimit: newLim);
                               if (ctx.mounted) Navigator.pop(ctx);
                               if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
+                                messenger.showSnackBar(
                                   SnackBar(
                                     content: Text('Spending limit set to ₹${newLim.toStringAsFixed(0)}/month!'),
                                     backgroundColor: const Color(0xFF10B981),
@@ -2123,54 +2124,56 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'You have ₹${surplus.toStringAsFixed(0)} set aside from your pay for savings.',
-                style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: transferCtrl,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Amount to Transfer (₹)',
-                  labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-                  prefixText: '₹ ',
-                  prefixStyle: const TextStyle(color: AppTheme.primary),
-                  filled: true,
-                  fillColor: const Color(0xFF1E293B),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'You have ₹${surplus.toStringAsFixed(0)} set aside from your pay for savings.',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                 ),
-              ),
-              const SizedBox(height: 14),
-              const Text('Destination:', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('Emergency Shield', style: TextStyle(fontSize: 11)),
-                    selected: target == 'emergency',
-                    selectedColor: AppTheme.primary,
-                    checkmarkColor: Colors.white,
-                    backgroundColor: const Color(0xFF1E293B),
-                    onSelected: (val) => setDlgState(() => target = 'emergency'),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: transferCtrl,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Amount to Transfer (₹)',
+                    labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                    prefixText: '₹ ',
+                    prefixStyle: const TextStyle(color: AppTheme.primary),
+                    filled: true,
+                    fillColor: const Color(0xFF1E293B),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Savings Goals', style: TextStyle(fontSize: 11)),
-                    selected: target == 'savings',
-                    selectedColor: AppTheme.primary,
-                    checkmarkColor: Colors.white,
-                    backgroundColor: const Color(0xFF1E293B),
-                    onSelected: (val) => setDlgState(() => target = 'savings'),
-                  ),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 14),
+                const Text('Destination:', style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8))),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Emergency Shield', style: TextStyle(fontSize: 11)),
+                      selected: target == 'emergency',
+                      selectedColor: AppTheme.primary,
+                      checkmarkColor: Colors.white,
+                      backgroundColor: const Color(0xFF1E293B),
+                      onSelected: (val) => setDlgState(() => target = 'emergency'),
+                    ),
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: const Text('Savings Goals', style: TextStyle(fontSize: 11)),
+                      selected: target == 'savings',
+                      selectedColor: AppTheme.primary,
+                      checkmarkColor: Colors.white,
+                      backgroundColor: const Color(0xFF1E293B),
+                      onSelected: (val) => setDlgState(() => target = 'savings'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -2364,14 +2367,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Spent ₹${spent.toStringAsFixed(0)} of ₹${limit.toStringAsFixed(0)} limit',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isDark ? Colors.white70 : Colors.black87,
-                  fontWeight: FontWeight.w500,
+              Expanded(
+                child: Text(
+                  'Spent ₹${spent.toStringAsFixed(0)} of ₹${limit.toStringAsFixed(0)} limit',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white70 : Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 isExceeded
                     ? 'Exceeded by ₹${(spent - limit).toStringAsFixed(0)}'
@@ -2395,10 +2402,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Savings surplus: ₹${state.surplusForOtherSections.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: Text(
+                      'Savings surplus: ₹${state.surplusForOtherSections.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   InkWell(
                     onTap: () => _showTransferSurplusDialog(state),
                     child: const Text(

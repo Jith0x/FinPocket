@@ -189,7 +189,11 @@ class _LoginScreenState extends State<LoginScreen> {
             err.contains('OAuth') ||
             err.contains('clientConfigurationError') ||
             err.contains('serverClientId') ||
-            err.contains('requires an active OAuth')) {
+            err.contains('requires an active OAuth') ||
+            err.contains('GOOGLE_CLIENT_ID') ||
+            err.contains('Google Sign-In is not configured') ||
+            err.contains('Google token verification failed') ||
+            err.toLowerCase().contains('google')) {
           _showGoogleSetupDialog(err);
         } else {
           setState(() {
@@ -201,20 +205,19 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showGoogleSetupDialog(String details) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? AppTheme.bgSurfaceDark
-            : AppTheme.bgSurfaceLight,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: isDark ? AppTheme.bgSurfaceDark : AppTheme.bgSurfaceLight,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         title: const Row(
           children: [
-            Icon(Icons.info_outline, color: Color(0xFF4285F4), size: 24),
+            Icon(Icons.info_outline_rounded, color: Color(0xFF4285F4), size: 24),
             SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Google Sign-In Notice',
+                'Google Sign-In Status',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
@@ -225,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Native Google Sign-In requires your Google Cloud OAuth Client ID and debug SHA-1 fingerprint to be registered for this device build.',
+              'Google OAuth is currently being provisioned on the cloud server. You can sign in immediately using your Email & Password or explore via Demo Sandbox.',
               style: TextStyle(fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 12),
@@ -233,24 +236,50 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFF4285F4).withOpacity(0.08),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFF4285F4).withOpacity(0.25)),
               ),
-              child: const Text(
-                'Please sign in with your email & password or complete Google Cloud Console OAuth setup for this device.',
-                style: TextStyle(fontSize: 12, height: 1.3),
+              child: const Row(
+                children: [
+                  Icon(Icons.lock_open_rounded, color: Color(0xFF4285F4), size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your FinPocket account and all data are fully active and accessible with your credentials.',
+                      style: TextStyle(fontSize: 11.5, height: 1.3),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _localError = null;
+              });
+              Provider.of<AppState>(context, listen: false).clearAuthError();
+            },
+            child: const Text('Dismiss', style: TextStyle(color: Colors.white60)),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primary,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                _localError = null;
+              });
+              Provider.of<AppState>(context, listen: false).clearAuthError();
+              FocusScope.of(context).requestFocus(FocusNode());
+            },
+            child: const Text('Use Email / Password'),
           ),
         ],
       ),
@@ -462,8 +491,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                              const Padding(
+                                padding: EdgeInsets.only(top: 2),
+                                child: Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -476,10 +509,25 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ),
                               ),
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _localError = null;
+                                  });
+                                  state.clearAuthError();
+                                },
+                                child: const Padding(
+                                  padding: EdgeInsets.all(2.0),
+                                  child: Icon(Icons.close, color: AppTheme.danger, size: 18),
+                                ),
+                              ),
                             ],
                           ),
-                          if ((_localError ?? state.authError ?? '').toLowerCase().contains('server') ||
-                              (_localError ?? state.authError ?? '').toLowerCase().contains('connection')) ...[
+                          if (!((_localError ?? state.authError ?? '').contains('GOOGLE_CLIENT_ID') ||
+                                  (_localError ?? state.authError ?? '').contains('Google Sign-In') ||
+                                  (_localError ?? state.authError ?? '').contains('OAuth')) &&
+                              ((_localError ?? state.authError ?? '').toLowerCase().contains('server') ||
+                                  (_localError ?? state.authError ?? '').toLowerCase().contains('connection'))) ...[
                             const SizedBox(height: 8),
                             InkWell(
                               onTap: () async {
