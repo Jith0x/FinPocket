@@ -29,6 +29,34 @@ export interface AAProviderConfig {
   setu: SetuAAConfig;
 }
 
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  appPassword?: string;
+  from: string;
+  isConfigured: boolean;
+}
+
+export interface SmsConfig {
+  provider: 'fast2sms' | 'msg91' | 'twilio' | 'mock';
+  isConfigured: boolean;
+  fast2sms: {
+    apiKey?: string;
+    route: string;
+  };
+  msg91: {
+    authKey?: string;
+    templateId?: string;
+  };
+  twilio: {
+    accountSid?: string;
+    authToken?: string;
+    fromNumber?: string;
+  };
+}
+
 export interface AppConfig {
   environment: AppEnvironment;
   port: number;
@@ -43,6 +71,8 @@ export interface AppConfig {
   allowMockSso: boolean;
   sslRequired: boolean;
   logLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  smtp: SmtpConfig;
+  sms: SmsConfig;
   aaProvider: AAProviderConfig;
   paymentLimits: {
     perTransaction: number;
@@ -159,6 +189,37 @@ export function loadAndValidateConfig(envOverride?: Record<string, string>): App
     }
   }
 
+  const smtpHost = envSource.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = Number(envSource.SMTP_PORT) || 587;
+  const smtpSecure = envSource.SMTP_SECURE === 'true' || smtpPort === 465;
+  const smtpUser = envSource.SMTP_USER || '';
+  const smtpAppPassword = envSource.SMTP_APP_PASSWORD || envSource.SMTP_PASS || '';
+  const smtpFrom = envSource.SMTP_FROM || envSource.EMAIL_FROM || '"FinPocket Security" <no-reply@finpocket.com>';
+  const isSmtpConfigured = Boolean(smtpUser && smtpAppPassword);
+
+  const rawSmsProvider = (envSource.SMS_PROVIDER || '').toLowerCase();
+  const fast2smsApiKey = envSource.FAST2SMS_API_KEY || '';
+  const fast2smsRoute = envSource.FAST2SMS_ROUTE || 'otp';
+  const msg91AuthKey = envSource.MSG91_AUTH_KEY || '';
+  const msg91TemplateId = envSource.MSG91_TEMPLATE_ID || '';
+  const twilioAccountSid = envSource.TWILIO_ACCOUNT_SID || '';
+  const twilioAuthToken = envSource.TWILIO_AUTH_TOKEN || '';
+  const twilioPhoneNumber = envSource.TWILIO_PHONE_NUMBER || '';
+
+  const smsProvider: 'fast2sms' | 'msg91' | 'twilio' | 'mock' =
+    rawSmsProvider === 'fast2sms' ? 'fast2sms' :
+    rawSmsProvider === 'msg91' ? 'msg91' :
+    rawSmsProvider === 'twilio' ? 'twilio' :
+    fast2smsApiKey ? 'fast2sms' :
+    (msg91AuthKey && msg91TemplateId) ? 'msg91' :
+    (twilioAccountSid && twilioAuthToken) ? 'twilio' : 'mock';
+
+  const isSmsConfigured = Boolean(
+    (smsProvider === 'fast2sms' && fast2smsApiKey) ||
+    (smsProvider === 'msg91' && msg91AuthKey && msg91TemplateId) ||
+    (smsProvider === 'twilio' && twilioAccountSid && twilioAuthToken)
+  );
+
   return {
     environment,
     port,
@@ -172,6 +233,32 @@ export function loadAndValidateConfig(envOverride?: Record<string, string>): App
     allowMockSso,
     sslRequired: environment === 'PRODUCTION',
     logLevel: (envSource.LOG_LEVEL as any) || 'INFO',
+    smtp: {
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      user: smtpUser,
+      appPassword: smtpAppPassword,
+      from: smtpFrom,
+      isConfigured: isSmtpConfigured,
+    },
+    sms: {
+      provider: smsProvider,
+      isConfigured: isSmsConfigured,
+      fast2sms: {
+        apiKey: fast2smsApiKey || undefined,
+        route: fast2smsRoute,
+      },
+      msg91: {
+        authKey: msg91AuthKey || undefined,
+        templateId: msg91TemplateId || undefined,
+      },
+      twilio: {
+        accountSid: twilioAccountSid || undefined,
+        authToken: twilioAuthToken || undefined,
+        fromNumber: twilioPhoneNumber || undefined,
+      },
+    },
     aaProvider: {
       enabled: aaEnabled,
       providerName: aaProviderName,

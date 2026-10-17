@@ -119,6 +119,7 @@ app.use('/api/v1/auth/email/send-otp', authLimiter);
 app.use('/api/v1/auth/email/verify-otp', authLimiter);
 app.use('/api/v1/auth/phone/send-otp', authLimiter);
 app.use('/api/v1/auth/phone/verify-otp', authLimiter);
+app.use('/api/v1/auth/otp/resend', authLimiter);
 app.use('/api/v1/auth/pin/verify', authLimiter);
 app.use('/api/v1/auth/google', authLimiter);
 app.use('/api/v1/auth/apple', authLimiter);

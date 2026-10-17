@@ -11,26 +11,20 @@ import {
   validatePasswordPolicy,
   isDisposableEmail,
   maskPhoneNumber,
-  maskName
+  maskName,
+  normalizeIndianPhoneNumber,
 } from '../utils/security.validator.js';
 import { GoogleAuthService } from '../services/google_auth.service.js';
 import { MetaAuthService } from '../services/meta_auth.service.js';
 import { AppleAuthService } from '../services/apple_auth.service.js';
 import { EmailService } from '../services/email.service.js';
+import { SmsService } from '../services/sms/sms.service.js';
+import { OtpService } from '../services/otp.service.js';
 
 const router = Router();
 
 // In-memory brute-force attempt tracker: email -> { attempts, lockedUntil }
 const loginAttempts = new Map<string, { attempts: number; lockedUntil: number }>();
-
-// In-memory phone OTP store: cleanPhone -> { otp, expiresAt, attempts, userId }
-const phoneOtpStore = new Map<string, { otp: string; expiresAt: number; attempts: number; userId: string | null }>();
-
-// In-memory email OTP store: cleanEmail -> { otp, expiresAt, attempts, verified }
-const emailOtpStore = new Map<string, { otp: string; expiresAt: number; attempts: number; verified: boolean }>();
-
-// In-memory verified phone numbers: cleanPhone -> expiresAt
-const verifiedPhoneStore = new Map<string, number>();
 
 // In-memory password reset store: cleanEmail -> { otp, expiresAt, attempts, userId }
 const passwordResetStore = new Map<string, { otp: string; expiresAt: number; attempts: number; userId: string }>();
@@ -44,6 +38,7 @@ function sanitizeUser(user: any) {
     phone: user.phone,
     maskedPhone: maskPhoneNumber(user.phone),
     isPhoneVerified: user.phone_verified === 1,
+    isEmailVerified: user.email_verified === 1,
     ssoProvider: user.sso_provider || null,
     preferredCurrency: user.preferred_currency,
     preferredLanguage: user.preferred_language,
@@ -85,8 +80,8 @@ router.post('/register', async (req, res: Response): Promise<void> => {
     }
 
     // 1b. Enforce Email OTP Verification
-    const emailRecord = emailOtpStore.get(cleanEmail);
-    if (!emailRecord || !emailRecord.verified) {
+    const isEmailVerified = await OtpService.isEmailVerifiedForRegistration(cleanEmail);
+    if (!isEmailVerified) {
       res.status(400).json({
         error: 'Please verify your email address with the OTP code sent to your inbox before creating your account.'
       });
@@ -94,10 +89,19 @@ router.post('/register', async (req, res: Response): Promise<void> => {
     }
 
     // 1c. Enforce Phone OTP Verification if phone is provided
-    const cleanPhone = phone ? phone.trim().replace(/\s+/g, '') : '';
-    if (cleanPhone) {
-      const phoneExpiry = verifiedPhoneStore.get(cleanPhone);
-      if (!phoneExpiry || phoneExpiry < Date.now()) {
+    let cleanPhone = '';
+    if (phone && typeof phone === 'string' && phone.trim()) {
+      const phoneValidation = normalizeIndianPhoneNumber(phone);
+      if (!phoneValidation.isValid || !phoneValidation.normalized) {
+        res.status(400).json({
+          error: phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number.'
+        });
+        return;
+      }
+      cleanPhone = phoneValidation.normalized;
+
+      const isPhoneVerified = await OtpService.isPhoneVerifiedForRegistration(cleanPhone);
+      if (!isPhoneVerified) {
         res.status(400).json({
           error: 'Please verify your mobile phone number with the OTP code before creating your account.'
         });
@@ -136,13 +140,15 @@ router.post('/register', async (req, res: Response): Promise<void> => {
     }
 
     await runQuery(`
-      INSERT INTO users (id, name, email, phone, phone_verified, password_hash)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, name, email, phone, phone_verified, email_verified, password_hash)
+      VALUES (?, ?, ?, ?, ?, 1, ?)
     `, [userId, name.trim(), cleanEmail, cleanPhone, cleanPhone ? 1 : 0, passwordHash]);
 
-    // Clean up OTP stores after account creation
-    emailOtpStore.delete(cleanEmail);
-    if (cleanPhone) verifiedPhoneStore.delete(cleanPhone);
+    // Bind registration verification record to this newly created user ID
+    await OtpService.linkRegistrationUser(cleanEmail, userId);
+    if (cleanPhone) {
+      await OtpService.linkRegistrationPhoneUser(cleanPhone, userId);
+    }
 
     // A new account starts with NO bank account and a ₹0 balance. The user
     // connects a real bank through the Account Aggregator flow (or imports real
@@ -185,12 +191,21 @@ router.post('/register', async (req, res: Response): Promise<void> => {
       VALUES (?, ?, 'USER_REGISTERED', ?)
     `, [uuidv4(), userId, JSON.stringify({ email, name })]);
 
+    const createdUser = await getQuery<any>('SELECT * FROM users WHERE id = ?', [userId]);
+
     res.status(201).json({
       token,
       refreshToken: rawRefreshToken,
       deviceId,
       sessionId,
-      user: { id: userId, name, email, phone }
+      user: sanitizeUser(createdUser || {
+        id: userId,
+        name: name.trim(),
+        email: cleanEmail,
+        phone: cleanPhone,
+        phone_verified: cleanPhone ? 1 : 0,
+        email_verified: 1,
+      })
     });
   } catch (err: any) {
     console.error('[auth] internal error:', err instanceof Error ? err.message : err);
@@ -431,8 +446,8 @@ router.post('/forgot-password', async (req, res: Response): Promise<void> => {
     res.json({
       success: true,
       message: 'Password reset verification code has been sent to your email.',
-      resetToken: otp,
-      devOtp: otp
+      resetToken: (config.environment === 'TEST' || config.isDemoMode) ? otp : undefined,
+      devOtp: (config.environment === 'TEST' || config.isDemoMode) ? otp : undefined
     });
   } catch (err: any) {
     console.error('[auth] internal error in forgot-password:', err instanceof Error ? err.message : err);
@@ -597,7 +612,7 @@ router.post('/update-pin', authMiddleware, async (req: AuthRequest, res: Respons
 
     const pinHash = await bcrypt.hash(newPin, 10);
     await runQuery('UPDATE users SET app_pin_hash = ? WHERE id = ?', [pinHash, req.user!.id]);
-    
+
     // Audit log without PIN value
     await runQuery(`
       INSERT INTO audit_logs (id, user_id, action, metadata)
@@ -638,45 +653,66 @@ router.post('/pin/verify', authMiddleware, async (req: AuthRequest, res: Respons
   }
 });
 
-// 9. PHONE AUTH: SEND OTP (6-digit verification code with rate limiting & privacy masking)
+// 9. PHONE AUTH: SEND OTP (6-digit verification code with rate limiting & SMS delivery)
 router.post('/phone/send-otp', async (req, res: Response): Promise<void> => {
   try {
     const { phone } = req.body;
-    if (!phone || phone.trim().length < 8) {
-      res.status(400).json({ error: 'Valid phone number with country code is required.' });
+    const phoneValidation = normalizeIndianPhoneNumber(phone);
+    if (!phoneValidation.isValid || !phoneValidation.normalized) {
+      res.status(400).json({
+        error: phoneValidation.error || 'Valid Indian mobile phone number (+91) is required.'
+      });
       return;
     }
-    const cleanPhone = phone.trim().replace(/\s+/g, '');
-    const now = Date.now();
-    const existing = phoneOtpStore.get(cleanPhone);
-    if (existing && existing.expiresAt > now && (now - (existing.expiresAt - 5 * 60 * 1000)) < 30000) {
-      res.status(429).json({ error: 'Please wait 30 seconds before requesting another verification code.' });
+    const cleanPhone = phoneValidation.normalized;
+
+    // Check optional bearer token for authenticated phone updates
+    let authenticatedUserId: string | undefined;
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as { userId?: string };
+        if (decoded.userId) authenticatedUserId = decoded.userId;
+      } catch { }
+    }
+
+    const bindUserId = authenticatedUserId || (typeof req.body.userId === 'string' && req.body.userId ? req.body.userId : null);
+    const purpose = bindUserId ? 'UPDATE_PHONE' : 'REGISTRATION_PHONE';
+
+    const issueRes = await OtpService.issueOtp({
+      destination: cleanPhone,
+      destinationType: 'PHONE',
+      purpose,
+      userId: bindUserId,
+      ip: req.ip || null,
+      userAgent: (req.headers['user-agent'] as string) || null,
+    });
+
+    if (!issueRes.success) {
+      res.status(429).json({
+        error: issueRes.error || 'Please wait before requesting another verification code.',
+        retryAfterSeconds: issueRes.retryAfterSeconds,
+        expiresInSeconds: issueRes.expiresInSeconds,
+      });
       return;
     }
 
-    // Generate 6-digit cryptographic OTP (CSPRNG, not Math.random)
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    const expiresAt = now + 5 * 60 * 1000; // 5 mins
-    // Bind the OTP to the account it was requested for (optional userId from
-    // the client). verify-otp will only ever update THIS user, which closes
-    // the "valid OTP for my phone → overwrite any account's phone" IDOR.
-    const bindUserId = typeof req.body.userId === 'string' && req.body.userId ? req.body.userId : null;
-    phoneOtpStore.set(cleanPhone, { otp, expiresAt, attempts: 0, userId: bindUserId });
-
-    console.log(`\n======================================================`);
-    console.log(`📱 [PHONE OTP] Sent to: ${cleanPhone}`);
-    console.log(`🔑 Verification Code: ${otp}`);
-    console.log(`======================================================\n`);
+    const delivered = await SmsService.sendOtp(cleanPhone, issueRes.otp!);
+    if (!delivered) {
+      res.status(500).json({ error: 'Failed to deliver SMS verification code. Please try again later.' });
+      return;
+    }
 
     res.json({
       success: true,
       message: 'Verification code sent successfully.',
       maskedPhone: maskPhoneNumber(cleanPhone),
-      // Provide devOtp if SMS gateway is not configured so user is never blocked
-      devOtp: (!process.env.TWILIO_ACCOUNT_SID || config.isDemoMode || config.environment === 'DEVELOPMENT') ? otp : undefined
+      expiresInSeconds: issueRes.expiresInSeconds,
+      resendCooldownSeconds: issueRes.resendCooldownSeconds,
+      devOtp: (config.environment === 'TEST' || config.isDemoMode) ? issueRes.otp : undefined,
     });
   } catch (err: any) {
-    console.error('[auth] internal error:', err instanceof Error ? err.message : err);
+    console.error('[auth] internal error in phone/send-otp:', err instanceof Error ? err.message : err);
     res.status(500).json({ error: 'Internal server error. Please try again.' });
   }
 });
@@ -689,82 +725,71 @@ router.post('/phone/verify-otp', async (req, res: Response): Promise<void> => {
       res.status(400).json({ error: 'Phone and verification code are required.' });
       return;
     }
-    const cleanPhone = phone.trim().replace(/\s+/g, '');
-    const record = phoneOtpStore.get(cleanPhone);
-    const now = Date.now();
 
-    if (!record || record.expiresAt < now) {
-      res.status(400).json({ error: 'Verification code has expired or is invalid. Please request a new one.' });
+    const phoneValidation = normalizeIndianPhoneNumber(phone);
+    if (!phoneValidation.isValid || !phoneValidation.normalized) {
+      res.status(400).json({
+        error: phoneValidation.error || 'Valid Indian mobile phone number (+91) is required.'
+      });
       return;
     }
+    const cleanPhone = phoneValidation.normalized;
 
-    if (record.attempts >= 4) {
-      phoneOtpStore.delete(cleanPhone);
-      res.status(429).json({ error: 'Too many incorrect attempts. Please request a new verification code.' });
-      return;
-    }
-
-    if (record.otp !== otp.trim()) {
-      record.attempts += 1;
-      res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
-      return;
-    }
-
-    // Valid OTP — who may this verification write to?
-    // 1. An authenticated request always writes to ITS OWN account; a body
-    //    userId can never retarget it.
-    // 2. An unauthenticated request may only write to the account the OTP was
-    //    bound to at send time (record.userId === body.userId).
-    // 3. Legacy unbound OTPs (send-otp without userId) are honored only in
-    //    TEST/DEVELOPMENT/DEMO; STAGING/PRODUCTION reject them fail-closed.
-    phoneOtpStore.delete(cleanPhone);
-
-    // Identity of the caller: this endpoint is public (the mobile app posts
-    // without an Authorization header in some flows), so when a Bearer token
-    // IS present we verify it here and pin the write to that account —
-    // a body userId can never retarget an authenticated verification.
+    // Caller identity: check bearer token
     let authenticatedUserId: string | undefined;
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
         const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET) as { userId?: string };
         if (decoded.userId) authenticatedUserId = decoded.userId;
-      } catch {
-        // Invalid/expired token → treated as unauthenticated below.
-      }
+      } catch { }
     }
 
     let targetUserId: string | null = null;
-
     if (authenticatedUserId) {
       targetUserId = authenticatedUserId;
-    } else if (record.userId) {
-      if (!userId || userId !== record.userId) {
-        res.status(403).json({ error: 'This verification code was issued for a different account.' });
-        return;
+    } else if (userId && typeof userId === 'string') {
+      targetUserId = userId;
+    }
+
+    const primaryPurpose = targetUserId ? 'UPDATE_PHONE' : 'REGISTRATION_PHONE';
+    let verifyRes = await OtpService.verifyOtp({
+      destination: cleanPhone,
+      purpose: primaryPurpose,
+      otp: String(otp).trim(),
+      userId: targetUserId,
+    });
+
+    // Fallback if purpose was REGISTRATION_PHONE but user is now passing userId or vice versa
+    if (!verifyRes.success && verifyRes.remainingAttempts !== 0) {
+      const fallbackPurpose = targetUserId ? 'REGISTRATION_PHONE' : 'UPDATE_PHONE';
+      const fallbackRes = await OtpService.verifyOtp({
+        destination: cleanPhone,
+        purpose: fallbackPurpose,
+        otp: String(otp).trim(),
+        userId: targetUserId,
+      });
+      if (fallbackRes.success) {
+        verifyRes = fallbackRes;
       }
-      targetUserId = record.userId;
-    } else if (userId && ['TEST', 'DEVELOPMENT', 'DEMO'].includes(config.environment)) {
-      targetUserId = userId; // dev-only legacy compatibility
-    } else if (userId) {
-      res.status(403).json({ error: 'Verification code is not bound to an account. Please request a new code.' });
+    }
+
+    if (!verifyRes.success) {
+      const statusCode = verifyRes.remainingAttempts === 0 ? 429 : 400;
+      res.status(statusCode).json({
+        error: verifyRes.error || 'Invalid verification code. Please check and try again.',
+        remainingAttempts: verifyRes.remainingAttempts,
+      });
       return;
     }
 
-    if (targetUserId) {
-      await runQuery('UPDATE users SET phone = ?, phone_verified = 1 WHERE id = ?', [cleanPhone, targetUserId]);
-    }
-
-    // Record verified phone for registration verification window (15 mins)
-    verifiedPhoneStore.set(cleanPhone, Date.now() + 15 * 60 * 1000);
-
     res.json({
       success: true,
+      verified: true,
       message: 'Phone number verified successfully.',
-      verified: true
     });
   } catch (err: any) {
-    console.error('[auth] internal error:', err instanceof Error ? err.message : err);
+    console.error('[auth] internal error in phone/verify-otp:', err instanceof Error ? err.message : err);
     res.status(500).json({ error: 'Internal server error. Please try again.' });
   }
 });
@@ -1274,23 +1299,35 @@ router.post('/email/send-otp', async (req, res: Response): Promise<void> => {
       return;
     }
 
-    const now = Date.now();
-    const existing = emailOtpStore.get(cleanEmail);
-    if (existing && existing.expiresAt > now && (now - (existing.expiresAt - 10 * 60 * 1000)) < 25000) {
-      res.status(429).json({ error: 'Please wait 25 seconds before requesting another verification code.' });
+    const issueRes = await OtpService.issueOtp({
+      destination: cleanEmail,
+      destinationType: 'EMAIL',
+      purpose: 'REGISTRATION_EMAIL',
+      ip: req.ip || null,
+      userAgent: (req.headers['user-agent'] as string) || null,
+    });
+
+    if (!issueRes.success) {
+      res.status(429).json({
+        error: issueRes.error || 'Please wait before requesting another verification code.',
+        retryAfterSeconds: issueRes.retryAfterSeconds,
+        expiresInSeconds: issueRes.expiresInSeconds,
+      });
       return;
     }
 
-    const otp = crypto.randomInt(100000, 1000000).toString();
-    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
-    emailOtpStore.set(cleanEmail, { otp, expiresAt, attempts: 0, verified: false });
-
-    await EmailService.sendRegistrationOtp(cleanEmail, otp);
+    const delivered = await EmailService.sendRegistrationOtp(cleanEmail, issueRes.otp!);
+    if (!delivered) {
+      res.status(500).json({ error: 'Failed to deliver verification code. Please try again later.' });
+      return;
+    }
 
     res.json({
       success: true,
       message: 'Verification code sent to your email address.',
-      devOtp: (!process.env.SMTP_HOST || config.environment === 'DEVELOPMENT' || config.isDemoMode) ? otp : undefined
+      expiresInSeconds: issueRes.expiresInSeconds,
+      resendCooldownSeconds: issueRes.resendCooldownSeconds,
+      devOtp: (config.environment === 'TEST' || config.isDemoMode) ? issueRes.otp : undefined,
     });
   } catch (err: any) {
     console.error('[auth] internal error in email/send-otp:', err instanceof Error ? err.message : err);
@@ -1307,35 +1344,153 @@ router.post('/email/verify-otp', async (req, res: Response): Promise<void> => {
       return;
     }
     const cleanEmail = email.toLowerCase().trim();
-    const record = emailOtpStore.get(cleanEmail);
-    const now = Date.now();
 
-    if (!record || record.expiresAt < now) {
-      res.status(400).json({ error: 'Verification code has expired or is invalid. Please request a new code.' });
+    const verifyRes = await OtpService.verifyOtp({
+      destination: cleanEmail,
+      purpose: 'REGISTRATION_EMAIL',
+      otp: String(otp).trim(),
+    });
+
+    if (!verifyRes.success) {
+      const statusCode = verifyRes.remainingAttempts === 0 ? 429 : 400;
+      res.status(statusCode).json({
+        error: verifyRes.error || 'Invalid verification code. Please check and try again.',
+        remainingAttempts: verifyRes.remainingAttempts,
+      });
       return;
     }
 
-    if (record.attempts >= 5) {
-      emailOtpStore.delete(cleanEmail);
-      res.status(429).json({ error: 'Too many incorrect attempts. Please request a new verification code.' });
-      return;
-    }
-
-    if (record.otp !== otp.toString().trim()) {
-      record.attempts += 1;
-      res.status(400).json({ error: 'Invalid verification code. Please check and try again.' });
-      return;
-    }
-
-    record.verified = true;
     res.json({
       success: true,
+      verified: true,
       message: 'Email address verified successfully!',
-      verified: true
     });
   } catch (err: any) {
     console.error('[auth] internal error in email/verify-otp:', err instanceof Error ? err.message : err);
     res.status(500).json({ error: 'Failed to verify code. Please try again.' });
+  }
+});
+
+// 23. UNIVERSAL OTP RESEND
+router.post('/otp/resend', async (req, res: Response): Promise<void> => {
+  try {
+    const { destination, type = 'EMAIL', purpose = 'REGISTRATION_EMAIL' } = req.body;
+    if (!destination || typeof destination !== 'string') {
+      res.status(400).json({ error: 'Destination is required.' });
+      return;
+    }
+
+    if (type === 'EMAIL') {
+      const cleanEmail = destination.toLowerCase().trim();
+      if (!cleanEmail.includes('@') || isDisposableEmail(cleanEmail)) {
+        res.status(400).json({ error: 'Valid personal or business email address is required.' });
+        return;
+      }
+
+      const issueRes = await OtpService.issueOtp({
+        destination: cleanEmail,
+        destinationType: 'EMAIL',
+        purpose: purpose as any,
+        ip: req.ip || null,
+        userAgent: (req.headers['user-agent'] as string) || null,
+      });
+
+      if (!issueRes.success) {
+        res.status(429).json({
+          error: issueRes.error || 'Please wait before requesting another verification code.',
+          retryAfterSeconds: issueRes.retryAfterSeconds,
+          expiresInSeconds: issueRes.expiresInSeconds,
+        });
+        return;
+      }
+
+      const delivered = await EmailService.sendRegistrationOtp(cleanEmail, issueRes.otp!);
+      if (!delivered) {
+        res.status(500).json({ error: 'Failed to deliver verification code. Please try again later.' });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: 'Verification code resent successfully.',
+        expiresInSeconds: issueRes.expiresInSeconds,
+        resendCooldownSeconds: issueRes.resendCooldownSeconds,
+        devOtp: (config.environment === 'TEST' || config.isDemoMode) ? issueRes.otp : undefined,
+      });
+      return;
+    }
+
+    if (type === 'PHONE') {
+      const phoneValidation = normalizeIndianPhoneNumber(destination);
+      if (!phoneValidation.isValid || !phoneValidation.normalized) {
+        res.status(400).json({ error: phoneValidation.error || 'Valid Indian mobile phone number (+91) is required.' });
+        return;
+      }
+      const cleanPhone = phoneValidation.normalized;
+
+      const issueRes = await OtpService.issueOtp({
+        destination: cleanPhone,
+        destinationType: 'PHONE',
+        purpose: purpose as any,
+        ip: req.ip || null,
+        userAgent: (req.headers['user-agent'] as string) || null,
+      });
+
+      if (!issueRes.success) {
+        res.status(429).json({
+          error: issueRes.error || 'Please wait before requesting another verification code.',
+          retryAfterSeconds: issueRes.retryAfterSeconds,
+          expiresInSeconds: issueRes.expiresInSeconds,
+        });
+        return;
+      }
+
+      const delivered = await SmsService.sendOtp(cleanPhone, issueRes.otp!);
+      if (!delivered) {
+        res.status(500).json({ error: 'Failed to deliver SMS verification code. Please try again later.' });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: 'Verification code resent successfully.',
+        maskedPhone: maskPhoneNumber(cleanPhone),
+        expiresInSeconds: issueRes.expiresInSeconds,
+        resendCooldownSeconds: issueRes.resendCooldownSeconds,
+        devOtp: (config.environment === 'TEST' || config.isDemoMode) ? issueRes.otp : undefined,
+      });
+      return;
+    }
+
+    res.status(400).json({ error: 'Unsupported destination type. Expected EMAIL or PHONE.' });
+  } catch (err: any) {
+    console.error('[auth] internal error in /otp/resend:', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: 'Internal server error. Please try again.' });
+  }
+});
+
+// 24. GET CURRENT USER VERIFICATION STATUS
+router.get('/verification-status', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await getQuery<any>(
+      'SELECT email, phone, email_verified, phone_verified FROM users WHERE id = ?',
+      [req.user!.id]
+    );
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found.' });
+      return;
+    }
+
+    res.json({
+      email: user.email,
+      maskedPhone: maskPhoneNumber(user.phone),
+      emailVerified: user.email_verified === 1,
+      phoneVerified: user.phone_verified === 1,
+    });
+  } catch (err: any) {
+    console.error('[auth] internal error in /verification-status:', err instanceof Error ? err.message : err);
+    res.status(500).json({ error: 'Internal server error. Please try again.' });
   }
 });
 

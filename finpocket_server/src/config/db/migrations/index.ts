@@ -451,7 +451,44 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO finpocket_app, finpocke
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO finpocket_app, finpocket_system;
 `;
 
+// ---------------------------------------------------------------------------
+// 0003 — otp_verifications & email_verified status
+// ---------------------------------------------------------------------------
+const M0003_OTP_VERIFICATIONS = `
+-- =====================================================================
+-- 0003 otp_verifications — email/phone OTP state & email_verified status
+-- =====================================================================
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified SMALLINT DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS otp_verifications (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  destination TEXT NOT NULL,
+  destination_type TEXT NOT NULL,
+  purpose TEXT NOT NULL,
+  otp_hash TEXT NOT NULL,
+  salt TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  attempts SMALLINT DEFAULT 0,
+  max_attempts SMALLINT DEFAULT 5,
+  resend_after TIMESTAMPTZ NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_otp_dest_purpose ON otp_verifications(destination, purpose, consumed_at);
+CREATE INDEX IF NOT EXISTS idx_otp_expires_at ON otp_verifications(expires_at);
+CREATE INDEX IF NOT EXISTS idx_otp_user_id ON otp_verifications(user_id);
+
+-- Pre-auth and tenant access grants
+GRANT SELECT, INSERT, UPDATE, DELETE ON otp_verifications TO finpocket_app, finpocket_system;
+`;
+
 export const POSTGRES_MIGRATIONS: PostgresMigration[] = [
   { version: 1, name: 'core_schema_parity', sql: M0001_CORE_SCHEMA_PARITY },
   { version: 2, name: 'rls_policies', sql: M0002_RLS_POLICIES },
+  { version: 3, name: 'otp_verifications', sql: M0003_OTP_VERIFICATIONS },
 ];

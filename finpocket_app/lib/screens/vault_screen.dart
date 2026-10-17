@@ -595,7 +595,8 @@ class _VaultScreenState extends State<VaultScreen> {
       {'label': 'Aadhaar Card', 'defaultName': 'Aadhaar National Identity', 'hint': 'e.g. 1234 5678 9012'},
       {'label': 'Passport', 'defaultName': 'Republic of India Passport', 'hint': 'e.g. Z1234567'},
       {'label': 'Driving License', 'defaultName': 'State Driving License', 'hint': 'e.g. DL-0420110012345'},
-      {'label': 'Salary Slip (ITR)', 'defaultName': 'Monthly Salary Slip', 'hint': 'e.g. REF-2026/06'},
+      {'label': 'Salary Slip', 'defaultName': 'Monthly Salary Slip', 'hint': 'e.g. SLIP-2026/06'},
+      {'label': 'ITC Document', 'defaultName': 'Input Tax Credit (ITC) / ITR', 'hint': 'e.g. ITC-2026-REF'},
       {'label': 'Health Insurance', 'defaultName': 'Star Health Insurance Policy', 'hint': 'e.g. POL-984210'},
       {'label': 'Other Document', 'defaultName': 'Personal Financial Document', 'hint': 'e.g. Document Reference ID'},
     ];
@@ -916,7 +917,7 @@ class _VaultScreenState extends State<VaultScreen> {
               return d.documentType.contains('Aadhaar') || d.documentType.contains('PAN') || d.documentType.contains('Passport') || d.documentType.contains('License');
             }
             if (_selectedCategory == 'FINANCIAL') {
-              return d.documentType.contains('Salary') || d.documentType.contains('Tax') || d.documentType.contains('Passbook');
+              return d.documentType.contains('Salary') || d.documentType.contains('Tax') || d.documentType.contains('ITC') || d.documentType.contains('ITR') || d.documentType.contains('Passbook');
             }
             if (_selectedCategory == 'INSURANCE') {
               return d.documentType.contains('Insurance');
@@ -1099,7 +1100,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Upload your PAN, Aadhaar, Insurance, or Salary Slips to store them in your secure encrypted vault.',
+                        'Upload your PAN, Aadhaar, Insurance, Salary Slips, or ITC documents to store them in your secure encrypted vault.',
                         textAlign: TextAlign.center,
                         style: TextStyle(fontSize: 12, color: isDark ? AppTheme.textSecondaryDark : AppTheme.textSecondaryLight),
                       ),

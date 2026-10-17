@@ -444,6 +444,7 @@ export async function initDatabase() {
   `);
 
   try { await runQuery('ALTER TABLE users ADD COLUMN phone_verified INTEGER DEFAULT 0'); } catch (_) {}
+  try { await runQuery('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0'); } catch (_) {}
   try { await runQuery('ALTER TABLE users ADD COLUMN sso_provider TEXT'); } catch (_) {}
 
   // The user's REAL UPI ID (from their own PhonePe/GPay/Paytm), captured once
@@ -460,6 +461,32 @@ export async function initDatabase() {
     await runQuery(`CREATE UNIQUE INDEX IF NOT EXISTS uq_bank_accounts_user_bank_acct
       ON bank_accounts(user_id, institution_name, masked_account_number)`);
   } catch (_) {}
+
+  // Dedicated OTP verifications table for email and mobile codes
+  await execQuery(`
+    CREATE TABLE IF NOT EXISTS otp_verifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      destination TEXT NOT NULL,
+      destination_type TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      otp_hash TEXT NOT NULL,
+      salt TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      attempts INTEGER DEFAULT 0,
+      max_attempts INTEGER DEFAULT 5,
+      resend_after TEXT NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_otp_dest_purpose ON otp_verifications(destination, purpose, consumed_at);
+    CREATE INDEX IF NOT EXISTS idx_otp_expires_at ON otp_verifications(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_otp_user_id ON otp_verifications(user_id);
+  `);
 
   await seedDefaultData();
 }

@@ -94,9 +94,16 @@ router.post('/emergency-fund/deposit', authMiddleware, async (req: AuthRequest, 
       return;
     }
 
-    const primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE user_id = ? AND is_primary = 1', [req.user!.id]);
-    if (!primaryAcc || primaryAcc.available_balance < amount) {
-      res.status(400).json({ error: 'Insufficient bank balance.' });
+    let primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE user_id = ? AND is_primary = 1', [req.user!.id]);
+    if (!primaryAcc) {
+      primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE user_id = ? ORDER BY available_balance DESC LIMIT 1', [req.user!.id]);
+    }
+    if (!primaryAcc) {
+      res.status(400).json({ error: 'No linked bank account found. Please link a bank account first.' });
+      return;
+    }
+    if (primaryAcc.available_balance < amount) {
+      res.status(400).json({ error: `Insufficient bank balance in ${primaryAcc.institution_name || 'linked bank'} (Available: ₹${primaryAcc.available_balance}).` });
       return;
     }
 

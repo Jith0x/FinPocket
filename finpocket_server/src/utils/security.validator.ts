@@ -159,3 +159,66 @@ export function maskName(fullName?: string | null): string {
     return part[0] + '*'.repeat(Math.max(1, part.length - 1));
   }).join(' ');
 }
+
+export interface PhoneValidationResult {
+  isValid: boolean;
+  normalized?: string;
+  raw10Digits?: string;
+  error?: string;
+}
+
+/**
+ * Normalizes and validates Indian mobile phone numbers (+91).
+ * Accepts formats: +919876543210, 919876543210, 09876543210, 9876543210 (with optional spaces/hyphens).
+ * Validates that the number has exactly 10 digits and starts with 6, 7, 8, or 9 (TRAI mobile numbering plan).
+ * Rejects non-Indian numbers and invalid lengths.
+ */
+export function normalizeIndianPhoneNumber(phone?: string | null): PhoneValidationResult {
+  if (!phone || typeof phone !== 'string') {
+    return {
+      isValid: false,
+      error: 'Mobile phone number is required.'
+    };
+  }
+
+  // Strip whitespace, hyphens, parentheses, and dots
+  let cleaned = phone.replace(/[\s\-\(\)\.]+/g, '').trim();
+
+  // If starts with +91, strip it
+  if (cleaned.startsWith('+91')) {
+    cleaned = cleaned.substring(3);
+  } else if (cleaned.startsWith('+')) {
+    return {
+      isValid: false,
+      error: 'Only Indian mobile numbers with +91 country code are supported.'
+    };
+  } else if (cleaned.startsWith('0')) {
+    // 0 trunk prefix commonly used in India
+    cleaned = cleaned.substring(1);
+  } else if (cleaned.startsWith('91') && cleaned.length === 12) {
+    // 91 prefix without plus sign
+    cleaned = cleaned.substring(2);
+  }
+
+  // Check 10-digit requirement
+  if (!/^\d{10}$/.test(cleaned)) {
+    return {
+      isValid: false,
+      error: 'Mobile number must be a valid 10-digit number.'
+    };
+  }
+
+  // Indian mobile numbering plan: must start with 6, 7, 8, or 9
+  if (!/^[6-9]/.test(cleaned)) {
+    return {
+      isValid: false,
+      error: 'Invalid Indian mobile number. Mobile numbers must start with 6, 7, 8, or 9.'
+    };
+  }
+
+  return {
+    isValid: true,
+    normalized: `+91${cleaned}`,
+    raw10Digits: cleaned
+  };
+}

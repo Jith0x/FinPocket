@@ -1727,6 +1727,31 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? _currentSpeakingTopic;
+  String? get currentSpeakingTopic => _currentSpeakingTopic;
+
+  Future<void> speakFeatureTopic(String topicKey) async {
+    if (_isSpeaking && _currentSpeakingTopic == topicKey) {
+      await stopSpeaking();
+      return;
+    }
+    await _ttsService.stop();
+    _currentSpeakingTopic = topicKey;
+    _isSpeaking = true;
+    notifyListeners();
+
+    final text = _ttsService.getSingleFeatureExplanation(
+      featureKey: topicKey,
+      lang: _language,
+      balance: totalAvailableBalance,
+      safeToSpend: _safeToSpend.safeToSpend,
+    );
+    await _ttsService.speak(text, _language);
+    _isSpeaking = false;
+    _currentSpeakingTopic = null;
+    notifyListeners();
+  }
+
   Future<void> speakFeaturesExplanation() async {
     final name = _currentUser?.fullName.split(' ').first ?? 'User';
     final text = _ttsService.getFeaturesExplanation(
@@ -1735,16 +1760,19 @@ class AppState extends ChangeNotifier {
       safeToSpend: _safeToSpend.safeToSpend,
       name: name,
     );
+    _currentSpeakingTopic = 'all_features';
     _isSpeaking = true;
     notifyListeners();
     await _ttsService.speak(text, _language);
     _isSpeaking = false;
+    _currentSpeakingTopic = null;
     notifyListeners();
   }
 
   Future<void> stopSpeaking() async {
     await _ttsService.stop();
     _isSpeaking = false;
+    _currentSpeakingTopic = null;
     notifyListeners();
   }
 
@@ -2335,6 +2363,25 @@ class AppState extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Refresh authoritative verification status (email & mobile) from backend
+  Future<Map<String, dynamic>?> refreshVerificationStatus() async {
+    if (_isDemoMode || _currentUser == null) return null;
+    try {
+      final status = await SecurityAuthService.getVerificationStatus();
+      if (_currentUser != null && status['emailVerified'] != null) {
+        _currentUser = _currentUser!.copyWith(
+          emailVerified: status['emailVerified'] == true,
+          phoneVerified: status['phoneVerified'] == true,
+        );
+        notifyListeners();
+      }
+      return status;
+    } catch (e) {
+      debugPrint('[AppState] refreshVerificationStatus error: $e');
+      return null;
     }
   }
 
@@ -3427,14 +3474,20 @@ class AppState extends ChangeNotifier {
     try {
       await ApiService.depositEmergencyFund(amount);
     } catch (e) {
-      // Real-data rule: if the server can't record the deposit, report the
-      // failure. (The old local fallback credited the fund, faked a
-      // SUCCESSFUL ledger row and mutated balances — all of which silently
-      // reverted on the next refresh anyway.)
-      debugPrint('[AppState] Emergency-fund deposit not recorded (server unreachable): $e');
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      final unreachable = raw.contains('SocketException') ||
+          raw.contains('Connection refused') ||
+          raw.contains('Connection closed') ||
+          raw.contains('TimeoutException') ||
+          raw.contains('ClientException') ||
+          raw.contains('XMLHttpRequest') ||
+          raw.contains('No host specified');
+      debugPrint('[AppState] Emergency-fund deposit not recorded: $e');
       return {
         'success': false,
-        'message': 'Could not reach the server, so your Emergency Fund was NOT changed. Please try again.'
+        'message': unreachable
+            ? 'Could not reach the server, so your Emergency Fund was NOT changed. Please try again.'
+            : raw,
       };
     }
 

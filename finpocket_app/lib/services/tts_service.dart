@@ -477,4 +477,220 @@ class TtsService {
             'Wishing you a disciplined, financially confident day ahead. Thank you.';
     }
   }
+
+  /// Individual feature audio explanation for any selected feature
+  String getSingleFeatureExplanation({
+    required String featureKey,
+    required SupportedLanguage lang,
+    double? balance,
+    double? safeToSpend,
+  }) {
+    final b = balance?.toInt() ?? 0;
+    final s = safeToSpend?.toInt() ?? 0;
+
+    switch (featureKey) {
+      case 'safe_to_spend':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'సేఫ్-టు-స్పెండ్ మీ మొత్తం బ్యాంక్ బ్యాలెన్స్ ₹$b నుండి రాబోయే బిల్లులు, ఈఎంఐలు మరియు పొదుపును మినహాయించి, ఈ రోజు మీరు సురక్షితంగా ఖర్చు చేయగల మొత్తం ₹$s అని లెక్కిస్తుంది. దీనివల్ల నెలాఖరులో డబ్బు కొరత రాదు.';
+          case SupportedLanguage.hi:
+            return 'सेफ-टू-स्पेंड आपके बैंक बैलेंस ₹$b में से आने वाले बिलों और बचत को सुरक्षित रखकर, आज खर्च करने के लिए सेफ लिमिट ₹$s तय करता है ताकि महीने के अंत में परेशानी न हो।';
+          case SupportedLanguage.ta:
+            return 'சேஃப்-டு-ஸ்பெண்ட் உங்கள் மொத்த இருப்பு ₹$b-ல் இருந்து பில்களை ஒதுக்கி, இன்று பாதுகாப்பாக செலவழிக்கக்கூடிய தொகை ₹$s என துல்லியமாக கணக்கிடுகிறது.';
+          case SupportedLanguage.kn:
+            return 'ಸೇಫ್-ಟು-ಸ್ಪೆಂಡ್ ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಬ್ಯಾಲೆನ್ಸ್ ₹$b ನಲ್ಲಿ ಬಿಲ್ಲುಗಳನ್ನು ಕಾಯ್ದಿರಿಸಿ, ಇಂದು ನೀವು ಸುರಕ್ಷಿತವಾಗಿ ಖರ್ಚು ಮಾಡಬಹುದಾದ ಮಿತಿ ₹$s ಎಂದು ತೋರಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'സേഫ്-ടു-സ്പെൻഡ് നിങ്ങളുടെ ആകെ ബാലൻസ് ₹$b-ൽ നിന്ന് ബില്ലുകൾ മാറ്റിവെച്ച്, ഇന്ന് ചെലവഴിക്കാവുന്ന സുരക്ഷിത തുക ₹$s ആണെന്ന് വ്യക്തമാക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'सेफ-टू-स्पेंड आपल्या बँकेतील शिल्लक ₹$b मधून बिले वजा करून, आज आपण सुरक्षितपणे ₹$s खर्च करू शकता हे सांगते.';
+          case SupportedLanguage.bn:
+            return 'সেফ-টু-স্পেন্ড আপনার মোট ব্যালেন্স ₹$b থেকে সমস্ত বিল সুরক্ষিত রেখে, আজ নিরাপদে খরচ করার পরিমাণ ₹$s হিসেব করে দেখায়।';
+          default:
+            return 'Safe-to-Spend dynamically calculates your exact spending limit for today, ₹$s, by subtracting upcoming bills, EMIs, and goals from your total balance of ₹$b. It prevents month-end cash crunches.';
+        }
+
+      case 'spend_guard':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'స్పెండ్ గార్డ్ అనవసర మరియు ఆవేశపూరిత ఖర్చులను అడ్డుకుంటుంది. పెద్ద యూపీఐ చెల్లింపుల సమయంలో అరవై సెకన్ల విరామం మరియు ఆలోచించే సమయాన్ని ఇచ్చి మీ బడ్జెట్‌ను కాపాడుతుంది.';
+          case SupportedLanguage.hi:
+            return 'स्पेंड गार्ड बड़े और बिना सोचे-समझे किए जाने वाले यूपीआई भुगतानों पर 60 सेकंड की रोक लगाकर आपको सोचने का समय देता है, जिससे फिजूलखर्ची से बचाव होता है।';
+          case SupportedLanguage.ta:
+            return 'ஸ்பெண்ட் கார்ட் தேவையற்ற அவசர செலவுகளை கட்டுப்படுத்துகிறது. பெரிய பரிவர்த்தனைகளுக்கு முன் 60 நொடிகள் சிந்திக்கும் இடைவெளியை தருகிறது.';
+          case SupportedLanguage.kn:
+            return 'ಸ್ಪೆಂಡ್ ಗಾರ್ಡ್ ಅನಗತ್ಯ ಖರ್ಚುಗಳನ್ನು ನಿಯಂತ್ರಿಸುತ್ತದೆ. ದೊಡ್ಡ ಯುಪಿಐ ಪಾವತಿಗಳಿಗೆ 60 ಸೆಕೆಂಡುಗಳ ವಿರಾಮ ನೀಡಿ ನಿಮ್ಮ ಹಣವನ್ನು ಉಳಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'സ്പെൻഡ് ഗാർഡ് അനാവശ്യ ചെലവുകൾ തടയുന്നു. വലിയ യുപിഐ പേയ്‌മെന്റുകൾക്ക് മുമ്പ് ചിന്തിക്കാൻ 60 സെക്കൻഡ് നൽകുന്നു.';
+          case SupportedLanguage.mr:
+            return 'स्पेंड गार्ड अनावश्यक खर्च रोखतो. मोठे पेमेंट करण्यापूर्वी 60 सेकंदांचा विचार करण्याचा वेळ देऊन तुमचे पैसे वाचवतो.';
+          case SupportedLanguage.bn:
+            return 'স্পেন্ড গার্ড অতিরিক্ত খরচ প্রতিরোধ করে. বড় ইউপিআই পেমেন্টের আগে ৬০ সেকেন্ডের বিরতি দিয়ে আপনাকে ভাবার সময় দেয়.';
+          default:
+            return 'Spend Guard acts as your behavioral impulse shield. It pauses large unbudgeted UPI transactions with a 60-second reflection timer to prevent buyer remorse.';
+        }
+
+      case 'round_up':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'ఆటోనమస్ రౌండ్-అప్ వాల్ట్ ప్రతి యూపీఐ చెల్లింపులోని చిల్లర పైసలను ఆటోమేటిక్‌గా మీ పొదుపు వాల్ట్‌లోకి చేర్చి పెద్ద నిధిగా మారుస్తుంది.';
+          case SupportedLanguage.hi:
+            return 'ऑटोनॉमस राउंड-अप वॉल्ट आपके हर यूपीआई पेमेंट के बचे हुए चिल्लर को अपने आप जोड़कर आपकी बचत गुल्लक में जमा कर देता है।';
+          case SupportedLanguage.ta:
+            return 'ரவுண்ட்-அப் வால்ட் ஒவ்வொரு யுபிஐ பரிவர்த்தனையிலும் மீதமுள்ள சில்லறை பணத்தை தானாகவே உங்கள் சேமிப்பு நிதியில் சேர்க்கிறது.';
+          case SupportedLanguage.kn:
+            return 'ರೌಂಡ್-ಅಪ್ ವಾಲ್ಟ್ ಪ್ರತಿ ಯುಪಿಐ ಪಾವತಿಯ ಚಿಲ್ಲರೆ ಹಣವನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಿಮ್ಮ ಉಳಿತಾಯದ ಖಾತೆಗೆ ವರ್ಗಾಯಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'റൗണ്ട്-അപ്പ് വോൾട്ട് ഓരോ യുപിഐ ഇടപാടിലെയും ചില്ലറത്തുട്ടുകൾ സ്വയമേവ നിങ്ങളുടെ സമ്പാദ്യത്തിലേക്ക് മാറ്റുന്നു.';
+          case SupportedLanguage.mr:
+            return 'राउंड-अप व्हॉल्ट प्रत्येक यूपीआय व्यवहारातील सुटे पैसे आपोआप तुमच्या बचतीमध्ये जमा करतो.';
+          case SupportedLanguage.bn:
+            return 'রাউন্ড-আপ ভল্ট প্রতিটি ইউপিআই পেমেন্টের খুচরো পয়সা স্বয়ংক্রিয়ভাবে আপনার সঞ্চয়ে যুক্ত করে.';
+          default:
+            return 'Autonomous Round-Up Vault rounds up your daily UPI transactions to the nearest ten rupees and sweeps the spare change into micro-savings.';
+        }
+
+      case 'subscriptions':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'ఘోస్ట్ సబ్‌స్క్రిప్షన్ రాడార్ మీ ఖాతాలోని రికరింగ్ ఆటో-డెబిట్లను నిరంతరం గమనిస్తూ, చార్జీలు కట్ అవ్వడానికి మూడు రోజుల ముందే మీకు సమాచారం అందిస్తుంది.';
+          case SupportedLanguage.hi:
+            return 'सब्सक्रिप्शन रडार ऑटो-डेबिट भुगतानों पर नज़र रखता है और पैसे कटने से 3 दिन पहले आपको सूचित करता है ताकि आप अनचाहे प्लान रोक सकें।';
+          case SupportedLanguage.ta:
+            return 'சந்தா ரேடார் தானியங்கி பில் மற்றும் ஓடிடி கட்டணங்களை கண்காணித்து, பணம் கழிப்பதற்கு 3 நாட்களுக்கு முன்பே உங்களுக்கு நினைவூட்டுகிறது.';
+          case SupportedLanguage.kn:
+            return 'ಚಂದಾದಾರಿಕೆ ರಾಡಾರ್ ಆಟೋ-ಡೆಬಿಟ್‌ಗಳನ್ನು ಗಮನಿಸುತ್ತದೆ ಮತ್ತು ಹಣ ಕಡಿತಗೊಳ್ಳುವ 3 ದಿನಗಳ ಮುಂಚೆಯೇ ನಿಮಗೆ ಎಚ್ಚರಿಕೆ ನೀಡುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'സബ്സ്ക്രിപ്ഷൻ റഡാർ ആവർത്തിച്ചുള്ള ചാർജുകൾ പരിശോധിച്ച്, പണം ഈടാക്കുന്നതിന് 3 ദിവസം മുമ്പ് അറിയിക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'वर्गणी रडार ऑटो-डेबिट पेमेंटवर लक्ष ठेवतो आणि पैसे कापले जाण्यापूर्वी 3 दिवस आधी आपल्याला सावध करतो.';
+          case SupportedLanguage.bn:
+            return 'সাবস্ক্রিপশন রাডার অটো-চার্জিং ট্র্যাক করে এবং টাকা কাটার ৩ দিন আগেই আপনাকে নোটিফিকেশন পাঠায়.';
+          default:
+            return 'Ghost Subscription Radar tracks recurring auto-debits and alerts you 3 days before any OTT or SaaS renewal charges your account.';
+        }
+
+      case 'bill_splitter':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'స్మార్ట్ బిల్ స్ప్లిట్టర్ రెస్టారెంట్ లేదా గ్రూప్ ఖర్చుల ఫోటో తీసి, సభ్యుల వాటాలను ట్యాక్స్ మరియు టిప్‌తో సహా విభజించి వాట్సాప్ యూపీఐ లింకులు పంపుతుంది.';
+          case SupportedLanguage.hi:
+            return 'स्मार्ट बिल स्प्लिटर बिल की फोटो खींचकर दोस्तों में सही-सही हिस्सा बांटता है और तुरंत व्हाट्सएप पर पेमेंट लिंक भेजता है।';
+          case SupportedLanguage.ta:
+            return 'பில் ஸ்ப்ளிட்டர் குழு செலவுகளையும் உணவக பில்களையும் சுலபமாக பிரித்து, யுபிஐ மூலம் வசூலிக்க உதவுகிறது.';
+          case SupportedLanguage.kn:
+            return 'ಬಿಲ್ ಸ್ಪ್ಲಿಟರ್ ಬಿಲ್ ಫೋಟೋ ತೆಗೆದು ಸ್ನೇಹಿತರ ನಡುವೆ ನಿಖರ ಪಾಲು ಹಂಚಿ ವಾಟ್ಸಾಪ್ ಮೂಲಕ ಹಣ ಪಡೆಯಲು ನೆರವಾಗುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'ബിൽ സ്പ്ലിറ്റർ സുഹൃത്തുക്കളുമൊത്തുള്ള ചെലവുകൾ എളുപ്പത്തിൽ തുല്യമായി വീതിക്കാൻ സഹായിക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'स्मार्ट बिल स्प्लिटर हॉटेल बिल किंवा मित्रांमधील खर्च अचूक वाटून व्हॉट्सॲपवर यूपीआय लिंक पाठवतो.';
+          case SupportedLanguage.bn:
+            return 'স্মার্ট বিল স্প্লিটার রেস্তোরাঁ বিল বন্ধুদের মধ্যে সমানভাবে ভাগ করে ইউপিআই লিংক পাঠিয়ে দেয়.';
+          default:
+            return 'Smart Bill Splitter lets you scan food or shopping receipts, divide items precisely with taxes, and generate 1-tap WhatsApp payment collection links.';
+        }
+
+      case 'what_if_lab':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'వాట్-ఇఫ్ ల్యాబ్ మీ ఫైనాన్షియల్ ట్విన్ సిమ్యులేటర్. జీతం మారినా లేదా కొత్త ఈఎంఐ తీసుకున్నా వచ్చే 12 నెలల్లో మీ సంపద ఎలా మారుతుందో ముందే ఊహిస్తుంది.';
+          case SupportedLanguage.hi:
+            return 'व्हाट-इफ लैब एक वित्तीय सिम्युलेटर है, जो यह दिखाता है कि नई सैलरी या लोन लेने पर अगले 12 महीनों में आपके पैसों पर क्या असर पड़ेगा।';
+          case SupportedLanguage.ta:
+            return 'வாட்-இஃப் லேப் சம்பள மாற்றம் அல்லது புதிய கடன்களின் தாக்கத்தை அடுத்த 12 மாதங்களுக்கு முன்கூட்டியே கணிக்கிறது.';
+          case SupportedLanguage.kn:
+            return 'ವಾಟ್-ಇಫ್ ಲ್ಯಾಬ್ ಸಂಬಳ ಬದಲಾವಣೆ ಅಥವಾ ಸಾಲದ ಪರಿಣಾಮವನ್ನು ಮುಂದಿನ 12 ತಿಂಗಳುಗಳವರೆಗೆ ಮೊದಲೇ ತೋರಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'വാട്ട്-ഇഫ് ലാബ് പുതിയ ലോണുകളും വരുമാന മാറ്റങ്ങളും അടുത്ത 12 മാസത്തേക്ക് എങ്ങനെ ബാധിക്കുമെന്ന് കണക്കുകൂട്ടുന്നു.';
+          case SupportedLanguage.mr:
+            return 'व्हॉट-इफ लॅब पगार किंवा कर्जातील बदलांचा पुढील 12 महिन्यांत काय परिणाम होईल हे दर्शवतो.';
+          case SupportedLanguage.bn:
+            return 'হোয়াট-ইফ ল্যাব বেতন বৃদ্ধি বা নতুন লোনের প্রভাব আগামী ১২ মাসের জন্য পূর্বাভাস দেয়.';
+          default:
+            return 'What-If Lab is your predictive financial twin. It models income shifts, new loan EMIs, and inflation across the next 12 months.';
+        }
+
+      case 'document_vault':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'పర్సనల్ డాక్యుమెంట్ వాల్ట్ ఆధార్, పాన్, శాలరీ స్లిప్పులు, ఐటీసీ మరియు ఇన్సూరెన్స్ పత్రాలను ఎన్‌క్రిప్ట్ చేసి మీ ఫోన్‌లోనే అత్యంత భద్రంగా ఉంచుతుంది.';
+          case SupportedLanguage.hi:
+            return 'डॉक्यूमेंट वॉल्ट आपके आधार, पैन, सैलरी स्लिप, आईटीसी और बीमा पेपर्स को बैंक-ग्रेड सुरक्षा के साथ पूरी तरह सुरक्षित रखता है।';
+          case SupportedLanguage.ta:
+            return 'டாகுமெண்ட் வால்ட் ஆதார், பான், சம்பள ரசீதுகள் மற்றும் காப்பீட்டு ஆவணங்களை முழுமையாக என்க்ரிப்ட் செய்து பாதுகாக்கிறது.';
+          case SupportedLanguage.kn:
+            return 'ಡಾಕ್ಯುಮೆಂಟ್ ವಾಲ್ಟ್ ಆಧಾರ್, ಪ್ಯಾನ್, ಸ್ಯಾಲರಿ ಸ್ಲಿಪ್ ಮತ್ತು ವಿಮೆ ದಾಖಲೆಗಳನ್ನು ಸಂಪೂರ್ಣ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನೊಂದಿಗೆ ರಕ್ಷಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'ഡോക്യുമെന്റ് വോൾട്ട് ആധാർ, പാൻ, സാലറി സ്ലിപ്പ്, ഇൻഷുറൻസ് എന്നിവ സുരക്ഷിതമായി സൂക്ഷിക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'दस्तऐवज व्हॉल्ट आधार, पॅन, पगार पावती आणि विमा कागदपत्रे पूर्णपणे एन्क्रिप्ट करून सुरक्षित ठेवतो.';
+          case SupportedLanguage.bn:
+            return 'ডকুমেন্ট ভল্ট আধার, প্যান, স্যালারি স্লিপ এবং বীমা নথিগুলি সুরক্ষিতভাবে ফোনে সংরক্ষণ করে.';
+          default:
+            return 'Personal Document Vault safeguards your Aadhaar, PAN, Salary Slips, ITC documents, and Insurance with AES-256 hardware encryption on your device.';
+        }
+
+      case 'stealth_mode':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'స్టెల్త్ మోడ్ బస్సు, మెట్రో లేదా పబ్లిక్ ప్రదేశాలలో మీ స్క్రీన్ చూసే వారి నుండి మీ బ్యాంక్ బ్యాలెన్స్‌ను ఒకే ట్యాప్‌తో దాచిపెడుతుంది.';
+          case SupportedLanguage.hi:
+            return 'स्टेल्थ मोड सार्वजनिक जगहों पर सिर्फ एक टैप में आपके बैंक बैलेंस को दूसरों की नज़रों से छिपा देता है।';
+          case SupportedLanguage.ta:
+            return 'ஸ்டெல்த் மோடு பொது இடங்களில் உங்கள் வங்கி இருப்பை மற்றவர்கள் பார்க்காதவாறு ஒரே தொடுதலில் மறைக்கிறது.';
+          case SupportedLanguage.kn:
+            return 'ಸ್ಟೆಲ್ತ್ ಮೋಡ್ ಸಾರ್ವಜನಿಕ ಸ್ಥಳಗಳಲ್ಲಿ ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಬ್ಯಾಲೆನ್ಸ್ ರಹಸ್ಯವಾಗಿರಿಸಲು ಕೇವಲ ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ ನೆರವಾಗುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'സ്റ്റെൽത്ത് മോഡ് പൊതുസ്ഥലങ്ങളിൽ നിങ്ങളുടെ അക്കൗണ്ട് ബാലൻസ് ഒളിപ്പിച്ചു വെക്കാൻ സഹായിക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'स्टेल्थ मोड गर्दीच्या ठिकाणी तुमचे बँक बॅलन्स एका टॅपने सुरक्षितपणे लपवून ठेवतो.';
+          case SupportedLanguage.bn:
+            return 'স্টিলথ মোড পাবলিক প্লেসে এক ট্যাপে আপনার ব্যালেন্স স্ক্রীন থেকে আড়াল করে.';
+          default:
+            return 'Stealth Privacy Mode masks your balances and sensitive money metrics on screen with one tap to protect you in public places.';
+        }
+
+      case 'soundbox':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'యూపీఐ పాకెట్ సౌండ్‌బాక్స్ ప్రతి చెల్లింపు మరియు అందుకున్న మొత్తాన్ని మీ స్థానిక భాషలో స్పష్టమైన ఆడియో అనౌన్స్‌మెంట్‌గా వినిపిస్తుంది.';
+          case SupportedLanguage.hi:
+            return 'यूपीआई पॉकेट साउंडबॉक्स हर लेनदेन की तुरंत आपकी अपनी भाषा में बोलकर पुष्टि करता है।';
+          case SupportedLanguage.ta:
+            return 'யுபிஐ பாக்கெட் சவுண்ட்பாக்ஸ் பணப்பரிவர்த்தனைகளை உங்கள் மொழியில் உடனடியாக அறிவிக்கிறது.';
+          case SupportedLanguage.kn:
+            return 'ಯುಪಿಐ ಪಾಕೆಟ್ ಸೌಂಡ್‌ಬಾಕ್ಸ್ ಪ್ರತಿ ಪಾವತಿಯನ್ನು ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿಯೇ ಧ್ವನಿ ಮೂಲಕ ದೃಢೀಕರಿಸುತ್ತದೆ.';
+          case SupportedLanguage.ml:
+            return 'യുപിഐ സൗണ്ട്ബോക്സ് ഓരോ ഇടപാടും നിങ്ങളുടെ ഭാഷയിൽ ഉച്ചത്തിൽ അനൗൺസ് ചെയ്യുന്നു.';
+          case SupportedLanguage.mr:
+            return 'यूपीआय पॉकेट साउंडबॉक्स प्रत्येक व्यवहाराची आपल्या भाषेत स्पष्ट आवाजात घोषणा करतो.';
+          case SupportedLanguage.bn:
+            return 'ইউপিআই পকেট সাউন্ডবক্স প্রতিটি লেনদেন আপনার ভাষায় স্পষ্ট কণ্ঠে ঘোষণা করে.';
+          default:
+            return 'UPI Pocket Soundbox announces sent and received money transactions aloud in your regional language with zero delay.';
+        }
+
+      case 'emergency_fund':
+        switch (lang) {
+          case SupportedLanguage.te:
+            return 'ఎమర్జెన్సీ షీల్డ్ 3 నుండి 6 నెలల అత్యవసర ఖర్చుల నిధిని భద్రపరిచి, అనుకోని అవసరాలు వచ్చినప్పుడు అప్పులపాలు కాకుండా రక్షిస్తుంది.';
+          case SupportedLanguage.hi:
+            return 'इमरजेंसी शील्ड 3 से 6 महीने के जरूरी खर्चों का सुरक्षा कवच बनाती है, ताकि किसी भी अचानक जरूरत में कर्ज न लेना पड़े।';
+          case SupportedLanguage.ta:
+            return 'அவசரகால நிதி எதிர்பாராத சூழ்நிலைகளில் கடனில் விழாமல் உங்களை காக்கும் பாதுகாப்பு அரணாகும்.';
+          case SupportedLanguage.kn:
+            return 'ತುರ್ತು ನಿಧಿ ಅನಿರೀಕ್ಷಿತ ಸಂದರ್ಭಗಳಲ್ಲಿ ಸಾಲದ ಸುಳಿಗೆ ಸಿಲುಕದಂತೆ ನಿಮ್ಮನ್ನು ರಕ್ಷಿಸುವ ಕವಚವಾಗಿದೆ.';
+          case SupportedLanguage.ml:
+            return 'എമർജൻസി ഷീൽഡ് അപ്രതീക്ഷിത ആവശ്യങ്ങൾക്ക് കടം വാങ്ങാതെ നിങ്ങളെ സംരക്ഷിക്കുന്നു.';
+          case SupportedLanguage.mr:
+            return 'आपत्कालीन निधी अचानक येणाऱ्या खर्चात कर्जात न अडकण्यासाठी सुरक्षा कवच देतो.';
+          case SupportedLanguage.bn:
+            return 'ইমার্জেন্সি শিল্ড যেকোনো জরুরি প্রয়োজনে আপনাকে ঋণের হাত থেকে বাঁচায়.';
+          default:
+            return 'Emergency Shield protects 3 to 6 months of essential living expenses, keeping you resilient against unforeseen shocks without debt.';
+        }
+
+      default:
+        return 'FinPocket feature guide. Tap any feature card to listen to its detailed breakdown.';
+    }
+  }
 }

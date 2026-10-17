@@ -45,6 +45,7 @@ class User {
   final String? pinHash;
   final String createdAt;
   final bool phoneVerified;
+  final bool emailVerified;
   final String maskedPhone;
   final String maskedName;
   final String? ssoProvider;
@@ -65,6 +66,7 @@ class User {
     this.pinHash,
     required this.createdAt,
     this.phoneVerified = false,
+    this.emailVerified = false,
     this.maskedPhone = '',
     this.maskedName = '',
     this.ssoProvider,
@@ -75,6 +77,7 @@ class User {
   String get name => fullName;
   bool get isGoogleLinked => ssoProvider == 'google';
   bool get isMetaLinked => ssoProvider == 'meta' || ssoProvider == 'facebook';
+  bool get isFullyVerified => emailVerified && (phone.isEmpty || phoneVerified);
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
@@ -91,7 +94,8 @@ class User {
       appPinEnabled: json['appPinEnabled'] == true || json['app_pin_enabled'] == true,
       pinHash: json['pinHash'] as String?,
       createdAt: json['createdAt'] ?? json['created_at'] ?? DateTime.now().toIso8601String(),
-      phoneVerified: json['isPhoneVerified'] == true || json['phone_verified'] == 1,
+      phoneVerified: json['isPhoneVerified'] == true || json['phone_verified'] == 1 || json['phoneVerified'] == true,
+      emailVerified: json['isEmailVerified'] == true || json['email_verified'] == 1 || json['emailVerified'] == true,
       maskedPhone: json['maskedPhone'] ?? '',
       maskedName: json['maskedName'] ?? '',
       ssoProvider: json['ssoProvider'] ?? json['sso_provider'],
@@ -108,6 +112,7 @@ class User {
     bool? appPinEnabled,
     String? pinHash,
     bool? phoneVerified,
+    bool? emailVerified,
     String? maskedPhone,
     String? maskedName,
     String? ssoProvider,
@@ -125,6 +130,7 @@ class User {
       pinHash: pinHash ?? this.pinHash,
       createdAt: createdAt,
       phoneVerified: phoneVerified ?? this.phoneVerified,
+      emailVerified: emailVerified ?? this.emailVerified,
       maskedPhone: maskedPhone ?? this.maskedPhone,
       maskedName: maskedName ?? this.maskedName,
       ssoProvider: ssoProvider ?? this.ssoProvider,

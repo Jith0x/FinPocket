@@ -26,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   String? _localError;
   bool _biometricsAvailable = false;
-  bool _isCaptchaValid = false;
 
   @override
   void initState() {
@@ -201,7 +200,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _showGoogleSetupDialog(String details) {
-    final state = Provider.of<AppState>(context, listen: false);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

@@ -1,27 +1,59 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import { config } from '../config/app_config.js';
+
+export interface SentMailRecord {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  sentAt: Date;
+}
 
 export class EmailService {
   private static transporter: Transporter | null = null;
+  private static mockTransporter: Transporter | null = null;
+  private static sentMails: SentMailRecord[] = [];
+
+  /**
+   * Test hook: set a mock nodemailer transporter for isolated unit testing.
+   */
+  static setMockTransporter(mock: Transporter | null): void {
+    this.mockTransporter = mock;
+  }
+
+  /**
+   * Test hook: retrieve recorded sent emails during test runs.
+   */
+  static getSentMails(): SentMailRecord[] {
+    return [...this.sentMails];
+  }
+
+  /**
+   * Test hook: clear recorded emails.
+   */
+  static clearSentMails(): void {
+    this.sentMails = [];
+  }
 
   private static getTransporter(): Transporter | null {
+    if (this.mockTransporter) return this.mockTransporter;
     if (this.transporter) return this.transporter;
 
-    const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
+    const { host, port, secure, user, appPassword } = config.smtp;
 
-    if (host && user && pass) {
+    if (host && user && appPassword) {
       try {
         this.transporter = nodemailer.createTransport({
           host,
           port,
-          secure: process.env.SMTP_SECURE === 'true' || port === 465,
-          auth: { user, pass },
+          secure,
+          auth: { user, pass: appPassword },
+          connectionTimeout: 10000,
+          greetingTimeout: 5000,
+          socketTimeout: 15000,
         });
-        console.log(`[EmailService] Configured SMTP transporter: ${host}:${port} (${user})`);
       } catch (err) {
-        console.error('[EmailService] Failed to initialize SMTP transport:', err);
+        console.error('[EmailService] Failed to initialize SMTP transport');
         this.transporter = null;
       }
     }
@@ -29,7 +61,8 @@ export class EmailService {
   }
 
   /**
-   * Send an email with HTML & plain text fallback
+   * Send an email with HTML & plain text fallback.
+   * Never leaks credentials or sensitive personal information into logs.
    */
   static async sendMail({
     to,
@@ -42,43 +75,46 @@ export class EmailService {
     text: string;
     html: string;
   }): Promise<boolean> {
-    const from = process.env.EMAIL_FROM || '"FinPocket Security" <no-reply@finpocket.com>';
+    const from = config.smtp.from;
+    const isTest = process.env.NODE_ENV === 'test' || config.environment === 'TEST';
     const transporter = this.getTransporter();
 
-    console.log(`\n======================================================`);
-    console.log(`📨 [OUTBOUND EMAIL] To: ${to}`);
-    console.log(`📌 Subject: ${subject}`);
-    console.log(`📝 Content:\n${text}`);
-    console.log(`======================================================\n`);
+    // In-memory test recording
+    if (isTest || this.mockTransporter || config.isDemoMode) {
+      this.sentMails.push({ to, subject, text, html, sentAt: new Date() });
+    }
 
     if (transporter) {
       try {
-        const info = await transporter.sendMail({
+        await transporter.sendMail({
           from,
           to,
           subject,
           text,
           html,
         });
-        console.log(`[EmailService] Mail delivered successfully: ${info.messageId}`);
         return true;
-      } catch (err) {
-        console.error('[EmailService] SMTP delivery failed:', err);
-        // Fallback to logged output in dev/testing
-        return true;
+      } catch (err: any) {
+        // Sanitize error logging: never expose passwords or tokens
+        const errCode = err?.code || 'UNKNOWN_SMTP_ERR';
+        console.error(`[EmailService] SMTP delivery failed: ${errCode}`);
+        return false;
       }
     } else {
-      console.log(`[EmailService] SMTP not configured. OTP printed to server log above for testing.`);
-      return true;
+      // In test, demo, or development with mock delivery, consider it queued/logged
+      if (isTest || config.isDemoMode || config.environment === 'DEVELOPMENT') {
+        return true;
+      }
+      return false;
     }
   }
 
   /**
-   * Send Email Verification OTP for Account Creation
+   * Send Email Verification OTP for Account Creation (5-minute expiration)
    */
   static async sendRegistrationOtp(email: string, otp: string): Promise<boolean> {
-    const subject = `Your FinPocket Verification Code: ${otp}`;
-    const text = `Welcome to FinPocket!\n\nYour 6-digit email verification code is: ${otp}\n\nThis code will expire in 10 minutes. Please enter this code in the app to complete your registration.\n\nIf you did not request this, please ignore this email.`;
+    const subject = 'Your FinPocket Verification Code';
+    const text = `Welcome to FinPocket!\n\nYour 6-digit email verification code is: ${otp}\n\nThis code will expire in 5 minutes. Please enter this code in the app to complete your registration.\n\nIf you did not request this, please ignore this email.`;
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b132b; color: #ffffff; padding: 40px 20px; border-radius: 12px; max-width: 520px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.1);">
         <div style="text-align: center; margin-bottom: 24px;">
@@ -91,7 +127,7 @@ export class EmailService {
           <div style="margin: 24px 0; background: #00e5ff; color: #0b132b; font-size: 32px; font-weight: 800; letter-spacing: 10px; padding: 14px 20px; border-radius: 8px; display: inline-block;">
             ${otp}
           </div>
-          <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏳ This code is valid for <strong>10 minutes</strong>. Never share this code with anyone.</p>
+          <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏳ This code is valid for <strong>5 minutes</strong>. Never share this code with anyone.</p>
         </div>
         <p style="color: #64748b; font-size: 11px; text-align: center; margin-top: 24px;">FinPocket Bank-Grade Financial Architecture • End-to-End Encrypted</p>
       </div>
@@ -101,12 +137,12 @@ export class EmailService {
   }
 
   /**
-   * Send Password Reset OTP
+   * Send Password Reset OTP (5-minute expiration)
    */
   static async sendPasswordResetOtp(email: string, otp: string, name?: string): Promise<boolean> {
     const greeting = name ? `Hi ${name},` : 'Hello,';
-    const subject = `FinPocket Password Reset Code: ${otp}`;
-    const text = `${greeting}\n\nWe received a request to reset your password for your FinPocket account.\n\nYour 6-digit password reset verification code is: ${otp}\n\nThis code will expire in 10 minutes. If you did not request a password reset, please secure your account immediately.\n\n- The FinPocket Security Team`;
+    const subject = 'FinPocket Password Reset Code';
+    const text = `${greeting}\n\nWe received a request to reset your password for your FinPocket account.\n\nYour 6-digit password reset verification code is: ${otp}\n\nThis code will expire in 5 minutes. If you did not request a password reset, please secure your account immediately.\n\n- The FinPocket Security Team`;
     const html = `
       <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0b132b; color: #ffffff; padding: 40px 20px; border-radius: 12px; max-width: 520px; margin: 0 auto; border: 1px solid rgba(255, 255, 255, 0.1);">
         <div style="text-align: center; margin-bottom: 24px;">
@@ -119,7 +155,7 @@ export class EmailService {
           <div style="margin: 24px 0; background: #00e5ff; color: #0b132b; font-size: 32px; font-weight: 800; letter-spacing: 10px; padding: 14px 20px; border-radius: 8px; display: inline-block;">
             ${otp}
           </div>
-          <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏳ Valid for <strong>10 minutes</strong>. If you did not request this, please ignore this email.</p>
+          <p style="color: #94a3b8; font-size: 12px; margin-bottom: 0;">⏳ Valid for <strong>5 minutes</strong>. If you did not request this, please ignore this email.</p>
         </div>
         <p style="color: #64748b; font-size: 11px; text-align: center; margin-top: 24px;">FinPocket Bank-Grade Financial Architecture • End-to-End Encrypted</p>
       </div>

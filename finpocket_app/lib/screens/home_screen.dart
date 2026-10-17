@@ -324,7 +324,6 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (ctx, setSheetState) {
             final activeState = Provider.of<AppState>(ctx);
             final currentPersona = activeState.ttsVoicePersona;
-            final currentLang = activeState.language;
 
             return SafeArea(
               child: Padding(
@@ -506,32 +505,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Select Language
-                      Text(
-                        'Language (All 8 Indian Languages)',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _buildLangChip(label: 'English', lang: SupportedLanguage.en, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'తెలుగు (Telugu)', lang: SupportedLanguage.te, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'हिन्दी (Hindi)', lang: SupportedLanguage.hi, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'தமிழ் (Tamil)', lang: SupportedLanguage.ta, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'ಕನ್ನಡ (Kannada)', lang: SupportedLanguage.kn, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'മലയാളം (Malayalam)', lang: SupportedLanguage.ml, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'मराठी (Marathi)', lang: SupportedLanguage.mr, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                          _buildLangChip(label: 'বাংলা (Bengali)', lang: SupportedLanguage.bn, current: currentLang, isDark: isDark, state: activeState, setSheetState: setSheetState),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-
                       // 📢 On-Device UPI Pocket Soundbox Toggle
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -590,7 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 18),
 
-                      // Audio Action Controls
+                      // Audio Action Controls (Original Position)
                       if (activeState.isSpeaking) ...[
                         SizedBox(
                           width: double.infinity,
@@ -602,9 +575,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             icon: const Icon(Icons.stop_rounded),
-                            label: const Text('Stop Speaking', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                            onPressed: () {
-                              activeState.stopSpeaking();
+                            label: Text('Stop Audio (${activeState.currentSpeakingTopic ?? "Speaking"})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            onPressed: () async {
+                              await activeState.stopSpeaking();
                               setSheetState(() {});
                             },
                           ),
@@ -620,7 +593,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             ),
                             icon: const Icon(Icons.play_circle_filled_rounded),
-                            label: const Text('Play Full Features & Limits Tour', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            label: const Text('Play Full Audio Walkthrough', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                             onPressed: () {
                               Navigator.pop(ctx);
                               activeState.speakFeaturesExplanation();
@@ -645,6 +618,33 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 20),
+
+                      // ==========================================
+                      // INDIVIDUAL FEATURE VOICE GUIDES
+                      // ==========================================
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Hear About Any Specific Feature',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
+                            ),
+                          ),
+                          Text(
+                            'Tap 🔊 to listen',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white60 : Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ..._buildFeatureVoiceList(context, activeState, isDark, setSheetState),
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -655,6 +655,166 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  List<Widget> _buildFeatureVoiceList(
+    BuildContext context,
+    AppState activeState,
+    bool isDark,
+    StateSetter setSheetState,
+  ) {
+    final features = [
+      {
+        'key': 'safe_to_spend',
+        'icon': '🎯',
+        'title': 'Safe-to-Spend & Daily Limit',
+        'desc': 'Today’s safe spending limit without touching bills or savings',
+        'color': const Color(0xFF3B82F6),
+      },
+      {
+        'key': 'spend_guard',
+        'icon': '🛡️',
+        'title': 'Spend Guard (Impulse Shield)',
+        'desc': '60-second reflection pause on large unbudgeted UPI spends',
+        'color': const Color(0xFF10B981),
+      },
+      {
+        'key': 'round_up',
+        'icon': '🪙',
+        'title': 'Autonomous Round-Up Vault',
+        'desc': 'Auto-sweeps spare change from UPI into micro-savings',
+        'color': const Color(0xFFF59E0B),
+      },
+      {
+        'key': 'subscriptions',
+        'icon': '📡',
+        'title': 'Ghost Subscription Radar',
+        'desc': '3-day advance notice before OTT & auto-debits renewal',
+        'color': const Color(0xFF8B5CF6),
+      },
+      {
+        'key': 'bill_splitter',
+        'icon': '🍽️',
+        'title': 'Smart Bill Splitter',
+        'desc': 'Divides dining & group bills and creates WhatsApp UPI links',
+        'color': const Color(0xFFEC4899),
+      },
+      {
+        'key': 'what_if_lab',
+        'icon': '🔬',
+        'title': 'What-If Lab (Financial Twin)',
+        'desc': 'Simulates salary changes, EMIs & inflation 12 months ahead',
+        'color': const Color(0xFF06B6D4),
+      },
+      {
+        'key': 'emergency_fund',
+        'icon': '🛡️',
+        'title': 'Emergency Shield',
+        'desc': '3-6 months buffer to stay financially resilient without debt',
+        'color': const Color(0xFF14B8A6),
+      },
+      {
+        'key': 'document_vault',
+        'icon': '🗄️',
+        'title': 'Personal Document Vault',
+        'desc': 'Hardware-encrypted storage for Aadhaar, PAN, Salary Slips & ITC',
+        'color': const Color(0xFF6366F1),
+      },
+      {
+        'key': 'stealth_mode',
+        'icon': '👁️',
+        'title': 'Stealth Privacy Mode',
+        'desc': '1-tap balance masking in public transport and crowded places',
+        'color': const Color(0xFF64748B),
+      },
+      {
+        'key': 'soundbox',
+        'icon': '📢',
+        'title': 'UPI Pocket Soundbox',
+        'desc': 'Zero-delay voice confirmation for sent & received UPI payments',
+        'color': const Color(0xFF10B981),
+      },
+    ];
+
+    return features.map((f) {
+      final key = f['key'] as String;
+      final isPlayingThis = activeState.isSpeaking && activeState.currentSpeakingTopic == key;
+      final tint = f['color'] as Color;
+
+      return Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isPlayingThis
+              ? tint.withOpacity(0.14)
+              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC)),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isPlayingThis
+                ? tint
+                : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+            width: isPlayingThis ? 1.6 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: tint.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              alignment: Alignment.center,
+              child: Text(f['icon'] as String, style: const TextStyle(fontSize: 16)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    f['title'] as String,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isPlayingThis
+                          ? tint
+                          : (isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    f['desc'] as String,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark ? Colors.white60 : Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(
+                isPlayingThis ? Icons.stop_circle_rounded : Icons.volume_up_rounded,
+                color: isPlayingThis ? Colors.redAccent : tint,
+                size: 24,
+              ),
+              tooltip: isPlayingThis ? 'Stop Audio' : 'Listen to ${f['title']}',
+              onPressed: () async {
+                if (isPlayingThis) {
+                  await activeState.stopSpeaking();
+                } else {
+                  await activeState.speakFeatureTopic(key);
+                }
+                setSheetState(() {});
+              },
+            ),
+          ],
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildPersonaChip({
@@ -687,47 +847,6 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
             color: isSelected
                 ? AppTheme.primary
-                : (isDark ? Colors.white70 : Colors.black87),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLangChip({
-    required String label,
-    required SupportedLanguage lang,
-    required SupportedLanguage current,
-    required bool isDark,
-    required AppState state,
-    required StateSetter setSheetState,
-  }) {
-    final isSelected = lang == current;
-    return GestureDetector(
-      onTap: () {
-        state.setLanguage(lang);
-        setSheetState(() {});
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF8B5CF6).withOpacity(0.18)
-              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9)),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF8B5CF6) : (isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
-            width: isSelected ? 1.6 : 1.0,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            color: isSelected
-                ? const Color(0xFF8B5CF6)
                 : (isDark ? Colors.white70 : Colors.black87),
           ),
         ),
@@ -1241,26 +1360,47 @@ class _HomeScreenState extends State<HomeScreen> {
                 label: state.t('safeToSpend').toUpperCase(),
                 value: isMasked ? '₹ ••••••' : '₹${state.safeToSpend.safeToSpendToday.toStringAsFixed(2)}',
                 valueColor: AppTheme.primary,
-                trailing: InkWell(
-                  onTap: () => _showSafeToSpendCalculation(
-                    context,
-                    state.safeToSpend,
-                    state.commitments,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        state.t('breakdown'),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        state.isSpeaking && state.currentSpeakingTopic == 'safe_to_spend'
+                            ? Icons.volume_up_rounded
+                            : Icons.volume_up_outlined,
+                        size: 18,
+                        color: state.isSpeaking && state.currentSpeakingTopic == 'safe_to_spend'
+                            ? AppTheme.primary
+                            : (isDark ? Colors.white70 : Colors.black54),
                       ),
-                      const Icon(Icons.chevron_right, size: 16, color: AppTheme.primary),
-                    ],
-                  ),
+                      tooltip: 'Listen to Safe-to-Spend voice guide',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => state.speakFeatureTopic('safe_to_spend'),
+                    ),
+                    const SizedBox(width: 8),
+                    InkWell(
+                      onTap: () => _showSafeToSpendCalculation(
+                        context,
+                        state.safeToSpend,
+                        state.commitments,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            state.t('breakdown'),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right, size: 16, color: AppTheme.primary),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 subtext: state
                     .t('safeToSpendBasis')

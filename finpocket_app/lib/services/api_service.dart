@@ -306,6 +306,20 @@ class ApiService {
     return {'isLinked': false};
   }
 
+  /// Query authoritative email and mobile verification status for the current session
+  static Future<Map<String, dynamic>> getVerificationStatus() async {
+    final response = await _sendWithAuth((headers) => http.get(
+      Uri.parse('$baseUrl/auth/verification-status'),
+      headers: headers,
+    ));
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data is Map<String, dynamic>) {
+      return data;
+    }
+    throw Exception(data['error'] ?? 'Failed to retrieve verification status (${response.statusCode})');
+  }
+
   /// Federated Meta (Facebook) Sign-In with access token
   static Future<Map<String, dynamic>> metaLogin({
     required String accessToken,

@@ -4,6 +4,8 @@ import '../../providers/app_state.dart';
 import '../../theme/app_theme.dart';
 import '../../config/app_config.dart';
 import '../../services/security_auth_service.dart';
+import '../../widgets/auth/captcha_widget.dart';
+import '../../widgets/auth/otp_verification_sheet.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -19,6 +21,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _captchaController = TextEditingController();
+  final GlobalKey<CaptchaWidgetState> _captchaKey = GlobalKey<CaptchaWidgetState>();
 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -117,6 +121,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _captchaController.dispose();
     super.dispose();
   }
 
@@ -125,7 +130,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _localError = null;
     });
 
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || !(_captchaKey.currentState?.isValid ?? false)) {
+      setState(() {
+        _localError = 'Please solve the security captcha correctly.';
+      });
+      _captchaKey.currentState?.refreshCaptcha();
       return;
     }
 
@@ -145,23 +154,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    // Enforce Legitimate Email OTP Verification
+    // Seamless guided verification flow:
     if (!_isEmailVerified) {
-      setState(() {
-        _localError = 'Please verify your email address with the OTP verification code.';
-      });
-      return;
+      final emailVerified = await _showEmailOtpModal();
+      if (!emailVerified) {
+        setState(() {
+          _localError = 'Please verify your email address to complete registration.';
+        });
+        return;
+      }
     }
 
-    // Enforce Phone OTP Verification if phone number is provided
     if (_phoneController.text.trim().isNotEmpty && !_isPhoneVerified) {
-      setState(() {
-        _localError = 'Please verify your mobile phone number with the OTP verification code.';
-      });
-      return;
+      final phoneVerified = await _showPhoneOtpModal();
+      if (!mounted) return;
+      if (!phoneVerified) {
+        setState(() {
+          _localError = 'Please verify your mobile phone number to complete registration.';
+        });
+        return;
+      }
     }
 
+    if (!mounted) return;
     final state = Provider.of<AppState>(context, listen: false);
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     final success = await state.register(
       _nameController.text.trim(),
       _emailController.text.trim(),
@@ -169,9 +188,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
       phone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
     );
 
-    if (success && mounted) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
-    } else if (mounted) {
+    if (!mounted) return;
+
+    if (success) {
+      await state.refreshVerificationStatus();
+      if (!mounted) return;
+      nav.popUntil((route) => route.isFirst);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Account verified and created successfully! Welcome to FinPocket.'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } else {
+      _captchaKey.currentState?.refreshCaptcha();
       setState(() {
         _localError = state.authError ?? 'Registration failed. Please check your information.';
       });
@@ -232,7 +262,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _showGoogleSetupDialog(String details) {
-    final state = Provider.of<AppState>(context, listen: false);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -526,19 +555,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
 
-  Future<void> _showEmailOtpModal() async {
+  Future<bool> _showEmailOtpModal() async {
     final email = _emailController.text.trim();
     if (email.isEmpty || !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
       setState(() {
         _localError = 'Please enter a valid email address before requesting OTP.';
       });
-      return;
+      return false;
     }
     if (SecurityAuthService.isDisposableEmail(email)) {
       setState(() {
         _localError = 'Temporary/disposable email domains are not permitted.';
       });
-      return;
+      return false;
     }
 
     final state = Provider.of<AppState>(context, listen: false);
@@ -549,7 +578,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     final sendRes = await SecurityAuthService.sendEmailOtp(email);
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() {
       _isSendingEmailOtp = false;
     });
@@ -558,162 +587,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _localError = sendRes['error'] ?? 'Unable to send verification code to email.';
       });
-      return;
+      return false;
     }
 
     final devOtp = sendRes['devOtp'] as String?;
-    final otpController = TextEditingController(text: devOtp ?? '');
+    final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
 
-    await showModalBottomSheet(
+    final verified = await OtpVerificationSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        String? modalError;
-        bool isVerifying = false;
-
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Email Verification',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'We sent a 6-digit verification code to $email. Please enter it to verify your email.',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  if (devOtp != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentBlue.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Verification Code: $devOtp',
-                        style: const TextStyle(
-                          color: AppTheme.accentBlue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: otpController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 22, letterSpacing: 8, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      hintText: '••••••',
-                      counterText: '',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  if (modalError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      modalError!,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: isVerifying
-                        ? null
-                        : () async {
-                            final code = otpController.text.trim();
-                            if (code.length != 6) {
-                              setModalState(() {
-                                modalError = 'Please enter all 6 digits.';
-                              });
-                              return;
-                            }
-                            setModalState(() {
-                              isVerifying = true;
-                              modalError = null;
-                            });
-
-                            final verifyRes = await SecurityAuthService.verifyEmailOtp(email, code);
-                            if (verifyRes['success'] == true) {
-                              if (!mounted) return;
-                              setState(() {
-                                _isEmailVerified = true;
-                                _localError = null;
-                              });
-                              state.clearAuthError();
-                              if (sheetContext.mounted) {
-                                Navigator.of(sheetContext).pop();
-                              }
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Email address verified successfully!'),
-                                  backgroundColor: AppTheme.success,
-                                ),
-                              );
-                            } else {
-                              setModalState(() {
-                                isVerifying = false;
-                                modalError = verifyRes['error'] ?? 'Invalid verification code. Please try again.';
-                              });
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: isVerifying
-                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Verify Email', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      type: OtpVerificationType.email,
+      destination: email,
+      initialDevOtp: devOtp,
+      initialCooldownSeconds: cooldown,
     );
+
+    if (verified == true && mounted) {
+      setState(() {
+        _isEmailVerified = true;
+        _localError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email address verified successfully!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      return true;
+    }
+    return false;
   }
 
-  Future<void> _showPhoneOtpModal() async {
+  Future<bool> _showPhoneOtpModal() async {
     final phone = _phoneController.text.trim();
-    if (phone.length < 8) {
+    final phoneValidation = SecurityAuthService.normalizeIndianPhone(phone);
+    if (!phoneValidation.isValid) {
       setState(() {
-        _localError = 'Please enter a valid phone number before verifying.';
+        _localError = phoneValidation.error ?? 'Please enter a valid 10-digit Indian mobile number.';
       });
-      return;
+      return false;
     }
 
+    final cleanPhone = phoneValidation.normalized!;
     final state = Provider.of<AppState>(context, listen: false);
     state.clearAuthError();
     setState(() {
@@ -721,8 +635,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _localError = null;
     });
 
-    final sendRes = await SecurityAuthService.sendPhoneOtp(phone);
-    if (!mounted) return;
+    final sendRes = await SecurityAuthService.sendPhoneOtp(cleanPhone);
+    if (!mounted) return false;
     setState(() {
       _isSendingOtp = false;
     });
@@ -731,151 +645,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() {
         _localError = sendRes['error'] ?? 'Unable to send verification SMS.';
       });
-      return;
+      return false;
     }
 
+    final masked = sendRes['maskedPhone'] as String? ?? SecurityAuthService.maskPhone(cleanPhone);
     final devOtp = sendRes['devOtp'] as String?;
-    final masked = sendRes['maskedPhone'] as String? ?? SecurityAuthService.maskPhone(phone);
-    final otpController = TextEditingController(text: devOtp ?? '');
+    final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
 
-    await showModalBottomSheet(
+    final verified = await OtpVerificationSheet.show(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) {
-        String? modalError;
-        bool isVerifying = false;
-
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Phone Verification',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(sheetContext),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'We sent a 6-digit security OTP to $masked for phone privacy authentication.',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  if (devOtp != null) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentBlue.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Verification Code: $devOtp',
-                        style: const TextStyle(
-                          color: AppTheme.accentBlue,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: otpController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 22, letterSpacing: 8, fontWeight: FontWeight.bold),
-                    decoration: InputDecoration(
-                      hintText: '••••••',
-                      counterText: '',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  if (modalError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      modalError!,
-                      style: const TextStyle(color: Colors.red, fontSize: 12),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: isVerifying
-                        ? null
-                        : () async {
-                            final code = otpController.text.trim();
-                            if (code.length != 6) {
-                              setModalState(() {
-                                modalError = 'Please enter all 6 digits.';
-                              });
-                              return;
-                            }
-                            setModalState(() {
-                              isVerifying = true;
-                              modalError = null;
-                            });
-
-                            final verifyRes = await SecurityAuthService.verifyPhoneOtp(phone, code);
-                            if (verifyRes['success'] == true) {
-                              if (!mounted) return;
-                              setState(() {
-                                _isPhoneVerified = true;
-                                _localError = null;
-                              });
-                              state.clearAuthError();
-                              if (sheetContext.mounted) {
-                                Navigator.of(sheetContext).pop();
-                              }
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Phone number verified securely!'),
-                                  backgroundColor: AppTheme.success,
-                                ),
-                              );
-                            } else {
-                              setModalState(() {
-                                isVerifying = false;
-                                modalError = verifyRes['error'] ?? 'Incorrect verification code.';
-                              });
-                            }
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: isVerifying
-                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Verify & Confirm Phone', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      type: OtpVerificationType.phone,
+      destination: cleanPhone,
+      maskedDestination: masked,
+      initialDevOtp: devOtp,
+      initialCooldownSeconds: cooldown,
     );
+
+    if (verified == true && mounted) {
+      setState(() {
+        _isPhoneVerified = true;
+        _localError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Mobile phone number verified successfully!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      return true;
+    }
+    return false;
   }
 
   Color _getStrengthColor(int score) {
@@ -1135,6 +934,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                   ),
+                  validator: (value) {
+                    if (value != null && value.trim().isNotEmpty) {
+                      final valResult = SecurityAuthService.normalizeIndianPhone(value);
+                      if (!valResult.isValid) {
+                        return valResult.error;
+                      }
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 4),
 
@@ -1145,7 +953,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        'Privacy Shield: Phone numbers & usernames are masked (${_phoneController.text.isNotEmpty ? SecurityAuthService.maskPhone(_phoneController.text) : '+91 ******0555'}).',
+                        'Privacy Shield: Phone numbers & usernames are masked (${_phoneController.text.isNotEmpty ? SecurityAuthService.maskPhone(_phoneController.text) : '+91 98*** *****'}).',
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ),
@@ -1275,6 +1083,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     }
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+
+                // Security Captcha Challenge
+                CaptchaWidget(
+                  key: _captchaKey,
+                  controller: _captchaController,
                 ),
                 const SizedBox(height: 20),
 

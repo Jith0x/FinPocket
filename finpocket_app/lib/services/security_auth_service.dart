@@ -26,6 +26,20 @@ class SSOAuthResult {
   });
 }
 
+class PhoneValidationResult {
+  final bool isValid;
+  final String? normalized;
+  final String? raw10Digits;
+  final String? error;
+
+  PhoneValidationResult({
+    required this.isValid,
+    this.normalized,
+    this.raw10Digits,
+    this.error,
+  });
+}
+
 class PasswordValidationResult {
   final bool isValid;
   final int score; // 0 to 4
@@ -245,40 +259,97 @@ class SecurityAuthService {
   // ==========================================
   // 4. EMAIL & PHONE OTP VERIFICATION
   // ==========================================
+
   static Future<Map<String, dynamic>> sendEmailOtp(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
     try {
       final res = await ApiService.postEndpointPublic('/auth/email/send-otp', {
-        'email': email.trim().toLowerCase(),
+        'email': cleanEmail,
       });
       final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : {'success': false};
+      if (res.statusCode == 200 && data is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Verification code sent to your email address.',
+          'expiresInSeconds': data['expiresInSeconds'] ?? 600,
+          'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
+          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
+        };
+      }
+      if (data is Map<String, dynamic>) {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to send verification code.',
+          'retryAfterSeconds': data['retryAfterSeconds'],
+          'expiresInSeconds': data['expiresInSeconds'],
+        };
+      }
+      return {'success': false, 'error': 'Failed to send verification code (${res.statusCode}).'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': 'Network connection issue. Please check your internet connection and try again.'};
     }
   }
 
   static Future<Map<String, dynamic>> verifyEmailOtp(String email, String otp) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final cleanOtp = otp.trim();
+
     try {
       final res = await ApiService.postEndpointPublic('/auth/email/verify-otp', {
-        'email': email.trim().toLowerCase(),
-        'otp': otp.trim(),
+        'email': cleanEmail,
+        'otp': cleanOtp,
       });
       final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : {'success': false};
+      if (res.statusCode == 200 && data is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'verified': true,
+          'message': data['message'] ?? 'Email address verified successfully!',
+        };
+      }
+      if (data is Map<String, dynamic>) {
+        return {
+          'success': false,
+          'verified': false,
+          'error': data['error'] ?? 'Invalid verification code. Please check and try again.',
+          'remainingAttempts': data['remainingAttempts'],
+        };
+      }
+      return {'success': false, 'verified': false, 'error': 'Verification failed (${res.statusCode}).'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'verified': false, 'error': 'Network error during verification. Please check your connection and retry.'};
     }
   }
 
-  static Future<Map<String, dynamic>> sendPhoneOtp(String phone) async {
+  static Future<Map<String, dynamic>> sendPhoneOtp(String phone, {String? userId}) async {
+    final cleanPhone = phone.trim().replaceAll(RegExp(r'\s+'), '');
     try {
       final res = await ApiService.postEndpointPublic('/auth/phone/send-otp', {
-        'phone': phone,
+        'phone': cleanPhone,
+        if (userId != null) 'userId': userId,
       });
       final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : {'success': false};
+      if (res.statusCode == 200 && data is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Verification code sent successfully.',
+          'maskedPhone': data['maskedPhone'] ?? maskPhone(cleanPhone),
+          'expiresInSeconds': data['expiresInSeconds'] ?? 300,
+          'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
+          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
+        };
+      }
+      if (data is Map<String, dynamic>) {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Failed to send mobile verification code.',
+          'retryAfterSeconds': data['retryAfterSeconds'],
+          'expiresInSeconds': data['expiresInSeconds'],
+        };
+      }
+      return {'success': false, 'error': 'Failed to send verification SMS (${res.statusCode}).'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': 'Network connection issue. Please check your internet connection and try again.'};
     }
   }
 
@@ -287,22 +358,113 @@ class SecurityAuthService {
     String otp, {
     String? userId,
   }) async {
+    final cleanPhone = phone.trim().replaceAll(RegExp(r'\s+'), '');
+    final cleanOtp = otp.trim();
+
     try {
       final res = await ApiService.postEndpointPublic('/auth/phone/verify-otp', {
-        'phone': phone,
-        'otp': otp,
+        'phone': cleanPhone,
+        'otp': cleanOtp,
         if (userId != null) 'userId': userId,
       });
       final data = jsonDecode(res.body);
-      return data is Map<String, dynamic> ? data : {'success': false};
+      if (res.statusCode == 200 && data is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'verified': true,
+          'message': data['message'] ?? 'Phone number verified successfully.',
+        };
+      }
+      if (data is Map<String, dynamic>) {
+        return {
+          'success': false,
+          'verified': false,
+          'error': data['error'] ?? 'Invalid verification code. Please check and try again.',
+          'remainingAttempts': data['remainingAttempts'],
+        };
+      }
+      return {'success': false, 'verified': false, 'error': 'Verification failed (${res.statusCode}).'};
     } catch (e) {
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'verified': false, 'error': 'Network error during verification. Please check your connection and retry.'};
     }
   }
 
+  static Future<Map<String, dynamic>> resendOtp({
+    required String destination,
+    required String type,
+    String? purpose,
+  }) async {
+    try {
+      final cleanDest = destination.trim();
+      final res = await ApiService.postEndpointPublic('/auth/otp/resend', {
+        'destination': cleanDest,
+        'type': type,
+        'purpose': purpose ?? (type == 'PHONE' ? 'REGISTRATION_PHONE' : 'REGISTRATION_EMAIL'),
+      });
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data is Map<String, dynamic>) {
+        return {
+          'success': true,
+          'message': data['message'] ?? 'Verification code resent successfully.',
+          'expiresInSeconds': data['expiresInSeconds'] ?? 300,
+          'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
+          if (data['maskedPhone'] != null) 'maskedPhone': data['maskedPhone'],
+          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
+        };
+      }
+      if (data is Map<String, dynamic>) {
+        return {
+          'success': false,
+          'error': data['error'] ?? 'Please wait before requesting another code.',
+          'retryAfterSeconds': data['retryAfterSeconds'],
+          'expiresInSeconds': data['expiresInSeconds'],
+        };
+      }
+      return {'success': false, 'error': 'Resend failed (${res.statusCode}).'};
+    } catch (e) {
+      return {'success': false, 'error': 'Network error. Please try again.'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getVerificationStatus() async {
+    return await ApiService.getVerificationStatus();
+  }
+
   // ==========================================
-  // 5. PRIVACY MASKING HELPERS
+  // 5. PRIVACY MASKING & PHONE NORMALIZATION HELPERS
   // ==========================================
+  static PhoneValidationResult normalizeIndianPhone(String? phone) {
+    if (phone == null || phone.trim().isEmpty) {
+      return PhoneValidationResult(isValid: false, error: 'Mobile phone number is required.');
+    }
+
+    String cleaned = phone.replaceAll(RegExp(r'[\s\-\(\)\.]+'), '').trim();
+
+    if (cleaned.startsWith('+91')) {
+      cleaned = cleaned.substring(3);
+    } else if (cleaned.startsWith('+')) {
+      return PhoneValidationResult(isValid: false, error: 'Only Indian mobile numbers (+91) are supported.');
+    } else if (cleaned.startsWith('0')) {
+      cleaned = cleaned.substring(1);
+    } else if (cleaned.startsWith('91') && cleaned.length == 12) {
+      cleaned = cleaned.substring(2);
+    }
+
+    if (!RegExp(r'^\d{10}$').hasMatch(cleaned)) {
+      return PhoneValidationResult(isValid: false, error: 'Please enter a valid 10-digit Indian mobile number.');
+    }
+
+    if (!RegExp(r'^[6-9]').hasMatch(cleaned)) {
+      return PhoneValidationResult(isValid: false, error: 'Indian mobile numbers must start with 6, 7, 8, or 9.');
+    }
+
+    return PhoneValidationResult(
+      isValid: true,
+      normalized: '+91$cleaned',
+      raw10Digits: cleaned,
+    );
+  }
+
   static String maskPhone(String? phone) {
     if (phone == null || phone.isEmpty) return '';
     final clean = phone.replaceAll(RegExp(r'\s+'), '');
