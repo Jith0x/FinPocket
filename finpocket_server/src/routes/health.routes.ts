@@ -48,7 +48,6 @@ router.get('/ready', async (_req: Request, res: Response) => {
       status: 'READY',
       database: 'CONNECTED',
       environment: config.environment,
-      isDemoMode: config.isDemoMode,
       // Account Aggregator availability — lets the mobile app choose between
       // the real AA consent flow and the on-device SMS importer instead of guessing.
       aaEnabled: config.aaProvider.enabled === true &&

@@ -68,8 +68,8 @@ class AppConfig {
   static bool get isTest => environment == AppEnvironment.test;
   static bool get isDevelopment => environment == AppEnvironment.development;
 
-  /// In production, demo auto-login or fallback is strictly prohibited (fails closed)
-  static bool get allowDemoAutoLogin => (environment == AppEnvironment.demo || environment == AppEnvironment.development) && !isProduction;
+  /// Demo auto-login and demo fallbacks are permanently disabled
+  static bool get allowDemoAutoLogin => false;
 
   /// Fail-closed production check for local URLs
   static String get apiBaseUrl {

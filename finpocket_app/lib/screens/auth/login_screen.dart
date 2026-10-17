@@ -228,7 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Google OAuth is currently being provisioned on the cloud server. You can sign in immediately using your Email & Password or explore via Demo Sandbox.',
+              'Google OAuth is currently being provisioned on the cloud server. You can sign in immediately using your Email & Password.',
               style: TextStyle(fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 12),
@@ -858,33 +858,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
-
-                  // Demo Mode Quick Access (Non-production only)
-                  if (AppConfig.allowDemoAutoLogin) ...[
-                    const Divider(color: Colors.white12),
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      key: const Key('explore_demo_mode_button'),
-                      onPressed: state.isLoading
-                          ? null
-                          : () {
-                              state.enterDemoMode();
-                            },
-                      icon: const Icon(Icons.developer_mode, size: 18, color: AppTheme.accentBlue),
-                      label: const Text(
-                        'Explore Demo Mode (Sandbox)',
-                        style: TextStyle(color: AppTheme.accentBlue, fontSize: 13),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF334155)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ],
+                  const SizedBox(height: 16),
                 ],
               ),
             ),

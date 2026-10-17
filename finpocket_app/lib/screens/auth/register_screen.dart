@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_state.dart';
 import '../../theme/app_theme.dart';
-import '../../config/app_config.dart';
 import '../../services/security_auth_service.dart';
 import '../../widgets/auth/captcha_widget.dart';
 import '../../widgets/auth/otp_verification_sheet.dart';
@@ -1224,34 +1223,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                   ],
                 ),
-
-                // Demo Mode Quick Access (Non-production only)
-                if (AppConfig.allowDemoAutoLogin) ...[
-                  const SizedBox(height: 14),
-                  const Divider(color: Colors.white12),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    key: const Key('register_explore_demo_button'),
-                    onPressed: state.isLoading
-                        ? null
-                        : () {
-                            state.enterDemoMode();
-                            Navigator.of(context).popUntil((route) => route.isFirst);
-                          },
-                    icon: const Icon(Icons.developer_mode, size: 18, color: AppTheme.accentBlue),
-                    label: const Text(
-                      'Explore Demo Mode (Sandbox)',
-                      style: TextStyle(color: AppTheme.accentBlue, fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      side: const BorderSide(color: Color(0xFF334155)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ],
+                const SizedBox(height: 16),
               ],
             ),
           ),
