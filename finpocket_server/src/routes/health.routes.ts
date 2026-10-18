@@ -76,5 +76,43 @@ router.get('/email-diag', async (_req: Request, res: Response) => {
   });
 });
 
+/**
+ * 4. GET /health/test-brevo (Direct probe from Render to Brevo API)
+ */
+router.get('/test-brevo', async (req: Request, res: Response) => {
+  const targetEmail = (req.query.email as string) || 'sureddydinesh197@gmail.com';
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  const brevoFromEmail = process.env.BREVO_FROM_EMAIL || config.smtp.user || 'no-reply@finpocket.com';
+  const brevoFromName = process.env.BREVO_FROM_NAME || 'FinPocket Security';
+
+  if (!brevoApiKey) {
+    res.status(400).json({ error: 'BREVO_API_KEY is not defined on this server.' });
+    return;
+  }
+
+  try {
+    const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': brevoApiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: brevoFromName, email: brevoFromEmail },
+        to: [{ email: targetEmail }],
+        subject: 'FinPocket Cloud Verification Test',
+        htmlContent: '<p>Direct cloud test from Render</p>',
+      }),
+    });
+
+    const status = brevoRes.status;
+    const body = await brevoRes.text();
+    res.json({ brevoStatus: status, brevoResponse: body });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 
