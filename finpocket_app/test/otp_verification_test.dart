@@ -102,7 +102,6 @@ void main() {
               type: OtpVerificationType.email,
               destination: 'sarah@finpocket.com',
               initialCooldownSeconds: 30,
-              initialDevOtp: '654321',
             ),
           ),
         ),
@@ -113,7 +112,6 @@ void main() {
       expect(find.textContaining('sarah@finpocket.com'), findsOneWidget);
       expect(find.byKey(const Key('otp_input_field')), findsOneWidget);
       expect(find.byKey(const Key('otp_verify_button')), findsOneWidget);
-      expect(find.byKey(const Key('otp_autofill_button')), findsOneWidget);
       expect(find.byKey(const Key('otp_resend_countdown')), findsOneWidget);
       expect(find.text('Resend code in 30s'), findsOneWidget);
 
@@ -122,27 +120,30 @@ void main() {
       expect(button.onPressed, isNull);
     });
 
-    // 6. OtpVerificationSheet Auto-Fill and Input Entry
-    testWidgets('6. Entering 6-digit code enables verify button and auto-fill works', (WidgetTester tester) async {
+    // 6. OtpVerificationSheet Real Code Entry
+    testWidgets('6. Entering 6-digit code enables verify button and populates input', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
             body: OtpVerificationSheet(
               type: OtpVerificationType.email,
               destination: 'sarah@finpocket.com',
-              initialDevOtp: '789123',
             ),
           ),
         ),
       );
       await tester.pump();
 
-      // Tap Auto-Fill
-      await tester.tap(find.byKey(const Key('otp_autofill_button')));
+      // Enter 6-digit verification code
+      await tester.enterText(find.byKey(const Key('otp_input_field')), '789123');
       await tester.pump();
 
       final input = tester.widget<TextField>(find.byKey(const Key('otp_input_field')));
       expect(input.controller!.text, equals('789123'));
+
+      // Verify button should now be enabled
+      final button = tester.widget<ElevatedButton>(find.byKey(const Key('otp_verify_button')));
+      expect(button.onPressed, isNotNull);
     });
 
     // 7. OtpVerificationSheet Rendering (Mobile Phone)

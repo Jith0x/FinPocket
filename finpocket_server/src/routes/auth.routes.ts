@@ -29,18 +29,7 @@ const loginAttempts = new Map<string, { attempts: number; lockedUntil: number }>
 // In-memory password reset store: cleanEmail -> { otp, expiresAt, attempts, userId }
 const passwordResetStore = new Map<string, { otp: string; expiresAt: number; attempts: number; userId: string }>();
 
-function isDevOtpFallback(): boolean {
-  if (process.env.NODE_ENV === 'test' || config.environment === 'TEST') {
-    return false;
-  }
-  return (
-    config.environment === 'DEVELOPMENT' ||
-    config.environment === 'DEMO' ||
-    config.environment === 'STAGING' ||
-    config.isDemoMode ||
-    process.env.ALLOW_DEV_OTP === 'true'
-  );
-}
+
 
 function sanitizeUser(user: any) {
   return {
@@ -468,13 +457,15 @@ router.post('/forgot-password', async (req, res: Response): Promise<void> => {
       VALUES (?, ?, 'PASSWORD_RESET_REQUESTED', ?)
     `, [uuidv4(), user.id, JSON.stringify({ ip: req.ip })]);
 
-    await EmailService.sendPasswordResetOtp(cleanEmail, otp, user.name);
+    const emailSent = await EmailService.sendPasswordResetOtp(cleanEmail, otp, user.name);
+    if (!emailSent) {
+      res.status(500).json({ error: 'Failed to send password reset email. Please try again later.' });
+      return;
+    }
 
     res.json({
       success: true,
-      message: 'Password reset verification code has been sent to your email.',
-      resetToken: (config.environment === 'TEST' || config.isDemoMode || isDevOtpFallback()) ? otp : undefined,
-      devOtp: (config.environment === 'TEST' || config.isDemoMode || isDevOtpFallback()) ? otp : undefined
+      message: 'Password reset verification code has been sent to your email.'
     });
   } catch (err: any) {
     console.error('[auth] internal error in forgot-password:', err instanceof Error ? err.message : err);
@@ -733,18 +724,6 @@ router.post('/phone/send-otp', async (req, res: Response): Promise<void> => {
 
     const delivered = await SmsService.sendOtp(cleanPhone, issueRes.otp!);
     if (!delivered) {
-      if (isDevOtpFallback()) {
-        console.warn(`[auth] SMS delivery unavailable for ${maskPhoneNumber(cleanPhone)}; providing fallback verification code in development mode.`);
-        res.json({
-          success: true,
-          message: 'Verification code generated (SMS gateway unavailable in current cloud environment).',
-          maskedPhone: maskPhoneNumber(cleanPhone),
-          expiresInSeconds: issueRes.expiresInSeconds,
-          resendCooldownSeconds: issueRes.resendCooldownSeconds,
-          devOtp: issueRes.otp,
-        });
-        return;
-      }
       res.status(500).json({ error: 'Failed to deliver SMS verification code. Please try again later.' });
       return;
     }
@@ -755,7 +734,6 @@ router.post('/phone/send-otp', async (req, res: Response): Promise<void> => {
       maskedPhone: maskPhoneNumber(cleanPhone),
       expiresInSeconds: issueRes.expiresInSeconds,
       resendCooldownSeconds: issueRes.resendCooldownSeconds,
-      devOtp: (isDevOtpFallback() || config.environment === 'TEST') ? issueRes.otp : undefined,
     });
   } catch (err: any) {
     console.error('[auth] internal error in phone/send-otp:', err instanceof Error ? err.message : err);
@@ -1382,17 +1360,6 @@ router.post('/email/send-otp', async (req, res: Response): Promise<void> => {
 
     const delivered = await EmailService.sendRegistrationOtp(cleanEmail, issueRes.otp!);
     if (!delivered) {
-      if (isDevOtpFallback()) {
-        console.warn(`[auth] Email delivery unavailable for ${cleanEmail}; providing fallback verification code in development mode.`);
-        res.json({
-          success: true,
-          message: 'Verification code generated (email gateway unavailable in current cloud environment).',
-          expiresInSeconds: issueRes.expiresInSeconds,
-          resendCooldownSeconds: issueRes.resendCooldownSeconds,
-          devOtp: issueRes.otp,
-        });
-        return;
-      }
       res.status(500).json({ error: 'Failed to deliver verification code. Please try again later.' });
       return;
     }
@@ -1402,7 +1369,6 @@ router.post('/email/send-otp', async (req, res: Response): Promise<void> => {
       message: 'Verification code sent to your email address.',
       expiresInSeconds: issueRes.expiresInSeconds,
       resendCooldownSeconds: issueRes.resendCooldownSeconds,
-      devOtp: (isDevOtpFallback() || config.environment === 'TEST') ? issueRes.otp : undefined,
     });
   } catch (err: any) {
     console.error('[auth] internal error in email/send-otp:', err instanceof Error ? err.message : err);
@@ -1481,17 +1447,6 @@ router.post('/otp/resend', async (req, res: Response): Promise<void> => {
 
       const delivered = await EmailService.sendRegistrationOtp(cleanEmail, issueRes.otp!);
       if (!delivered) {
-        if (isDevOtpFallback()) {
-          console.warn(`[auth] Email resend unavailable for ${cleanEmail}; providing fallback verification code in development mode.`);
-          res.json({
-            success: true,
-            message: 'Verification code resent (email gateway unavailable in current cloud environment).',
-            expiresInSeconds: issueRes.expiresInSeconds,
-            resendCooldownSeconds: issueRes.resendCooldownSeconds,
-            devOtp: issueRes.otp,
-          });
-          return;
-        }
         res.status(500).json({ error: 'Failed to deliver verification code. Please try again later.' });
         return;
       }
@@ -1501,7 +1456,6 @@ router.post('/otp/resend', async (req, res: Response): Promise<void> => {
         message: 'Verification code resent successfully.',
         expiresInSeconds: issueRes.expiresInSeconds,
         resendCooldownSeconds: issueRes.resendCooldownSeconds,
-        devOtp: (isDevOtpFallback() || config.environment === 'TEST') ? issueRes.otp : undefined,
       });
       return;
     }
@@ -1533,18 +1487,6 @@ router.post('/otp/resend', async (req, res: Response): Promise<void> => {
 
       const delivered = await SmsService.sendOtp(cleanPhone, issueRes.otp!);
       if (!delivered) {
-        if (isDevOtpFallback()) {
-          console.warn(`[auth] SMS resend unavailable for ${maskPhoneNumber(cleanPhone)}; providing fallback verification code in development mode.`);
-          res.json({
-            success: true,
-            message: 'Verification code resent (SMS gateway unavailable in current cloud environment).',
-            maskedPhone: maskPhoneNumber(cleanPhone),
-            expiresInSeconds: issueRes.expiresInSeconds,
-            resendCooldownSeconds: issueRes.resendCooldownSeconds,
-            devOtp: issueRes.otp,
-          });
-          return;
-        }
         res.status(500).json({ error: 'Failed to deliver SMS verification code. Please try again later.' });
         return;
       }
@@ -1555,7 +1497,6 @@ router.post('/otp/resend', async (req, res: Response): Promise<void> => {
         maskedPhone: maskPhoneNumber(cleanPhone),
         expiresInSeconds: issueRes.expiresInSeconds,
         resendCooldownSeconds: issueRes.resendCooldownSeconds,
-        devOtp: (isDevOtpFallback() || config.environment === 'TEST') ? issueRes.otp : undefined,
       });
       return;
     }

@@ -21,7 +21,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _obscureNewPassword = true;
   String? _statusMessage;
   String? _errorMessage;
-  String? _devOtp;
 
   @override
   void dispose() {
@@ -36,7 +35,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() {
       _errorMessage = null;
       _statusMessage = null;
-      _devOtp = null;
     });
 
     if (!_formKey.currentState!.validate()) {
@@ -48,11 +46,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       final res = await state.forgotPassword(_emailController.text.trim());
       setState(() {
         _isResetRequested = true;
-        _devOtp = res['devOtp'] as String? ?? res['resetToken'] as String?;
         _statusMessage = res['message'] ?? 'Password reset verification code sent to your email.';
-        if (_devOtp != null) {
-          _tokenController.text = _devOtp!;
-        }
       });
     } catch (e) {
       setState(() {
@@ -305,36 +299,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                  ),
                 ] else ...[
-                  if (_devOtp != null) ...[
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentBlue.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppTheme.accentBlue.withOpacity(0.3)),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.mark_email_read_outlined, color: AppTheme.accentBlue, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Verification Code: $_devOtp',
-                              style: const TextStyle(
-                                color: AppTheme.accentBlue,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
                   // Step 2: Set New Password Form
                   TextFormField(
                     key: const Key('reset_token_field'),

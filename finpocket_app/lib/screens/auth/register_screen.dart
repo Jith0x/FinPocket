@@ -589,14 +589,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return false;
     }
 
-    final devOtp = sendRes['devOtp'] as String?;
     final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
 
     final verified = await OtpVerificationSheet.show(
       context: context,
       type: OtpVerificationType.email,
       destination: email,
-      initialDevOtp: devOtp,
       initialCooldownSeconds: cooldown,
     );
 
@@ -648,7 +646,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final masked = sendRes['maskedPhone'] as String? ?? SecurityAuthService.maskPhone(cleanPhone);
-    final devOtp = sendRes['devOtp'] as String?;
     final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
 
     final verified = await OtpVerificationSheet.show(
@@ -656,7 +653,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       type: OtpVerificationType.phone,
       destination: cleanPhone,
       maskedDestination: masked,
-      initialDevOtp: devOtp,
       initialCooldownSeconds: cooldown,
     );
 

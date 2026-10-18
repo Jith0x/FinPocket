@@ -13,7 +13,6 @@ class OtpVerificationSheet extends StatefulWidget {
   final OtpVerificationType type;
   final String destination;
   final String? maskedDestination;
-  final String? initialDevOtp;
   final int initialCooldownSeconds;
   final String? userId;
 
@@ -22,7 +21,6 @@ class OtpVerificationSheet extends StatefulWidget {
     required this.type,
     required this.destination,
     this.maskedDestination,
-    this.initialDevOtp,
     this.initialCooldownSeconds = 30,
     this.userId,
   });
@@ -32,7 +30,6 @@ class OtpVerificationSheet extends StatefulWidget {
     required OtpVerificationType type,
     required String destination,
     String? maskedDestination,
-    String? initialDevOtp,
     int initialCooldownSeconds = 30,
     String? userId,
   }) {
@@ -47,7 +44,6 @@ class OtpVerificationSheet extends StatefulWidget {
         type: type,
         destination: destination,
         maskedDestination: maskedDestination,
-        initialDevOtp: initialDevOtp,
         initialCooldownSeconds: initialCooldownSeconds,
         userId: userId,
       ),
@@ -68,12 +64,10 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
   bool _isResending = false;
   String? _errorMessage;
   int? _remainingAttempts;
-  String? _currentDevOtp;
 
   @override
   void initState() {
     super.initState();
-    _currentDevOtp = widget.initialDevOtp;
     _resendSeconds = widget.initialCooldownSeconds > 0 ? widget.initialCooldownSeconds : 30;
     _startCountdown();
   }
@@ -193,9 +187,6 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
         final cooldown = (result['resendCooldownSeconds'] as int?) ?? 30;
         setState(() {
           _resendSeconds = cooldown;
-          if (result['devOtp'] != null) {
-            _currentDevOtp = result['devOtp'] as String;
-          }
           _remainingAttempts = null;
           _errorMessage = null;
         });
@@ -298,43 +289,6 @@ class _OtpVerificationSheetState extends State<OtpVerificationSheet> {
               ],
             ),
           ),
-
-          // Test/Demo Environment Helper
-          if (_currentDevOtp != null && _currentDevOtp!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.primary.withOpacity(0.25)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.code_rounded, size: 16, color: AppTheme.primary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Demo/Test Code: $_currentDevOtp',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.primary),
-                      ),
-                    ],
-                  ),
-                  TextButton(
-                    key: const Key('otp_autofill_button'),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                    onPressed: () {
-                      _otpController.text = _currentDevOtp!;
-                      setState(() {});
-                    },
-                    child: const Text('Auto-Fill', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                  ),
-                ],
-              ),
-            ),
-          ],
 
           const SizedBox(height: 20),
 

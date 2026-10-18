@@ -273,7 +273,6 @@ class SecurityAuthService {
           'message': data['message'] ?? 'Verification code sent to your email address.',
           'expiresInSeconds': data['expiresInSeconds'] ?? 600,
           'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
-          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
         };
       }
       if (data is Map<String, dynamic>) {
@@ -336,7 +335,6 @@ class SecurityAuthService {
           'maskedPhone': data['maskedPhone'] ?? maskPhone(cleanPhone),
           'expiresInSeconds': data['expiresInSeconds'] ?? 300,
           'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
-          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
         };
       }
       if (data is Map<String, dynamic>) {
@@ -409,7 +407,6 @@ class SecurityAuthService {
           'expiresInSeconds': data['expiresInSeconds'] ?? 300,
           'resendCooldownSeconds': data['resendCooldownSeconds'] ?? 30,
           if (data['maskedPhone'] != null) 'maskedPhone': data['maskedPhone'],
-          if (data['devOtp'] != null) 'devOtp': data['devOtp'],
         };
       }
       if (data is Map<String, dynamic>) {
