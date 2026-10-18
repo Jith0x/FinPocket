@@ -116,7 +116,41 @@ export class EmailService {
       }
     }
 
-    // 2. Direct SMTP transport
+    // 2. HTTP-based Email API (Brevo / Sendinblue) - works over HTTPS port 443
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    if (brevoApiKey && !this.mockTransporter && !isTest) {
+      try {
+        const brevoFromEmail = process.env.BREVO_FROM_EMAIL || config.smtp.user || 'no-reply@finpocket.com';
+        const brevoFromName = process.env.BREVO_FROM_NAME || 'FinPocket Security';
+        const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'api-key': brevoApiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: brevoFromName, email: brevoFromEmail },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+            textContent: text,
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`[EmailService] Email delivered successfully via Brevo API to ${to}`);
+          return true;
+        } else {
+          const errData = await response.text();
+          console.warn(`[EmailService] Brevo API delivery failed (${response.status}): ${errData}`);
+        }
+      } catch (httpErr: any) {
+        console.error(`[EmailService] Brevo HTTP API error: ${httpErr.message}`);
+      }
+    }
+
+    // 3. Direct SMTP transport
     if (transporter) {
       try {
         await transporter.sendMail({
