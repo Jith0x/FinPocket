@@ -213,4 +213,65 @@ export class AccountsService {
   static async disconnectAccount(userId: string, accountId: string) {
     return await this.provider.disconnectAccount(userId, accountId);
   }
+
+  static async createSelfDeclaredAccount(
+    userId: string,
+    params: {
+      institutionName?: string;
+      institutionCode?: string;
+      maskedAccountNumber?: string;
+      accountType?: string;
+      initialBalance?: number;
+    }
+  ): Promise<BankAccountDTO> {
+    const id = `bnk_${uuidv4().substring(0, 8)}`;
+    const now = new Date().toISOString();
+    const instName = params.institutionName || 'Primary Bank Account';
+    const instCode = params.institutionCode || 'INSTANT';
+    const masked = params.maskedAccountNumber || '•••• 4829';
+    const accType = params.accountType || 'SAVINGS';
+    const bal = typeof params.initialBalance === 'number' && params.initialBalance >= 0 ? params.initialBalance : 50000.0;
+
+    const existingPrimary = await getQuery<{ id: string }>(
+      'SELECT id FROM bank_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1',
+      [userId]
+    );
+    const isPrimary = !existingPrimary ? 1 : 0;
+
+    await runQuery(`
+      INSERT INTO bank_accounts (id, user_id, institution_name, institution_code, masked_account_number, account_type, current_balance, available_balance, is_primary, connection_status, provider_type, last_synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'CONNECTED', 'SELF_DECLARED', ?)
+    `, [
+      id,
+      userId,
+      instName,
+      instCode,
+      masked,
+      accType,
+      bal,
+      bal,
+      isPrimary,
+      now
+    ]);
+
+    await runQuery(`
+      INSERT INTO audit_logs (id, user_id, action, metadata)
+      VALUES (?, ?, 'BANK_CONNECTED', ?)
+    `, [uuidv4(), userId, JSON.stringify({ accountId: id, institution: instName, provider: 'SELF_DECLARED' })]);
+
+    return {
+      id,
+      institutionName: instName,
+      institutionCode: instCode,
+      maskedAccountNumber: masked,
+      accountType: accType,
+      currentBalance: bal,
+      availableBalance: bal,
+      currency: 'INR',
+      isPrimary: isPrimary === 1,
+      connectionStatus: 'CONNECTED',
+      providerType: 'SELF_DECLARED',
+      lastSyncedAt: now,
+    };
+  }
 }

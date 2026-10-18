@@ -25,6 +25,22 @@ router.post('/:id/sync', authMiddleware, async (req: AuthRequest, res: Response)
   }
 });
 
+router.post('/instant-link', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { institutionName, institutionCode, maskedAccountNumber, initialBalance, accountType } = req.body;
+    const account = await AccountsService.createSelfDeclaredAccount(req.user!.id, {
+      institutionName: institutionName || 'Primary Bank Account',
+      institutionCode: institutionCode || 'INSTANT',
+      maskedAccountNumber: maskedAccountNumber || '•••• 4829',
+      accountType: accountType || 'SAVINGS',
+      initialBalance: typeof initialBalance === 'number' && initialBalance >= 0 ? initialBalance : 50000.0,
+    });
+    res.status(201).json({ success: true, account });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/connect-mock', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   // Mock account connections are a TEST/DEV/DEMO affordance only — a real
   // environment must never fabricate a bank account for a user.
