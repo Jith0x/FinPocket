@@ -72,6 +72,8 @@ router.get('/email-diag', async (_req: Request, res: Response) => {
     hasResend: Boolean(process.env.RESEND_API_KEY),
     hasBrevo: Boolean(process.env.BREVO_API_KEY),
     hasSmtp: Boolean(config.smtp.user && config.smtp.appPassword),
+    has2Factor: Boolean(process.env.TWOFACTOR_API_KEY || process.env['2FACTOR_API_KEY']),
+    smsProvider: process.env.SMS_PROVIDER || config.sms?.provider || 'none',
     brevoFrom: process.env.BREVO_FROM_EMAIL || config.smtp.user || 'no-reply@finpocket.com',
   });
 });

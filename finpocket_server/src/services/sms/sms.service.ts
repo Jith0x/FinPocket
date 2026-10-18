@@ -2,6 +2,7 @@ import { ISmsProvider, SmsSendResult } from './sms_provider.interface.js';
 import { Fast2SmsProvider } from './fast2sms.provider.js';
 import { Msg91Provider } from './msg91.provider.js';
 import { TwilioSmsProvider } from './twilio.provider.js';
+import { TwoFactorSmsProvider } from './two_factor.provider.js';
 import { MockSmsProvider } from './mock_sms.provider.js';
 import { maskPhoneNumber } from '../../utils/security.validator.js';
 import { config } from '../../config/app_config.js';
@@ -30,8 +31,13 @@ export class SmsService {
     }
 
     const providerType = (process.env.SMS_PROVIDER || config.sms?.provider || '').toLowerCase();
+    const twoFactorApiKey = process.env.TWOFACTOR_API_KEY || process.env['2FACTOR_API_KEY'];
 
-    if (providerType === 'fast2sms' || (!providerType && process.env.FAST2SMS_API_KEY)) {
+    if (twoFactorApiKey || providerType === '2factor' || providerType === 'twofactor') {
+      this.activeProvider = new TwoFactorSmsProvider({
+        apiKey: twoFactorApiKey,
+      });
+    } else if (providerType === 'fast2sms' || (!providerType && process.env.FAST2SMS_API_KEY)) {
       this.activeProvider = new Fast2SmsProvider({
         apiKey: process.env.FAST2SMS_API_KEY,
         route: process.env.FAST2SMS_ROUTE || 'otp',
