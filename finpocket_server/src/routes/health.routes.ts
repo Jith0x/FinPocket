@@ -64,4 +64,17 @@ router.get('/ready', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * 3. GET /health/email-diag (Inspect configured email gateways safely)
+ */
+router.get('/email-diag', async (_req: Request, res: Response) => {
+  res.json({
+    hasResend: Boolean(process.env.RESEND_API_KEY),
+    hasBrevo: Boolean(process.env.BREVO_API_KEY),
+    hasSmtp: Boolean(config.smtp.user && config.smtp.appPassword),
+    brevoFrom: process.env.BREVO_FROM_EMAIL || config.smtp.user || 'no-reply@finpocket.com',
+  });
+});
+
 export default router;
+
