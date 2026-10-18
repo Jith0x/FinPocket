@@ -344,26 +344,7 @@ export class CalculationsService {
     );
 
     if (requests.length === 0) {
-      return [
-        {
-          id: 'pmt_init_01',
-          idempotencyKey: 'idem_sample_1',
-          recipient: 'Rahul Sharma (rahul@upi)',
-          amount: 2000.0,
-          state: 'PROCESSING',
-          note: 'Dinner split payment',
-          createdAt: new Date(Date.now() - 15 * 60000).toISOString()
-        },
-        {
-          id: 'pmt_init_02',
-          idempotencyKey: 'idem_sample_2',
-          recipient: 'Amit Verma (amit@okicici)',
-          amount: 5000.0,
-          state: 'PENDING',
-          note: 'Freelance project deposit',
-          createdAt: new Date(Date.now() - 45 * 60000).toISOString()
-        }
-      ];
+      return [];
     }
 
     return requests.map(r => ({
