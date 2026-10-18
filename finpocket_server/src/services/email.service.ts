@@ -48,9 +48,9 @@ export class EmailService {
           port,
           secure,
           auth: { user, pass: appPassword },
-          connectionTimeout: 10000,
-          greetingTimeout: 5000,
-          socketTimeout: 15000,
+          connectionTimeout: 4000,
+          greetingTimeout: 3000,
+          socketTimeout: 8000,
         });
       } catch (err) {
         console.error('[EmailService] Failed to initialize SMTP transport');
@@ -84,6 +84,39 @@ export class EmailService {
       this.sentMails.push({ to, subject, text, html, sentAt: new Date() });
     }
 
+    // 1. HTTP-based Email API (Resend) - works over HTTPS port 443 anywhere, including Render free tier
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey && !this.mockTransporter && !isTest) {
+      try {
+        const resendFrom = process.env.RESEND_FROM || 'FinPocket <onboarding@resend.dev>';
+        const response = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: resendFrom,
+            to: [to],
+            subject,
+            text,
+            html,
+          }),
+        });
+
+        if (response.ok) {
+          console.log(`[EmailService] Email delivered successfully via Resend API to ${to}`);
+          return true;
+        } else {
+          const errData = await response.text();
+          console.warn(`[EmailService] Resend API delivery failed (${response.status}): ${errData}`);
+        }
+      } catch (httpErr: any) {
+        console.error(`[EmailService] Resend HTTP API error: ${httpErr.message}`);
+      }
+    }
+
+    // 2. Direct SMTP transport
     if (transporter) {
       try {
         await transporter.sendMail({
