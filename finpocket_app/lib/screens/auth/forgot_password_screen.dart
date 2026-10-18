@@ -299,6 +299,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
+                  ),
                 ] else ...[
                   // Step 2: Set New Password Form
                   TextFormField(
