@@ -51,7 +51,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 5000 });
+  const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 15000 });
   try {
     await pool.query('SELECT 1');
   } catch (err) {

@@ -368,5 +368,38 @@ void main() {
       expect(parsed.transaction.sender.toLowerCase(), contains('mobile 9xxxxxx43210'));
       expect(parsed.transaction.referenceId, '628718993953');
     });
+
+    test('15. Parses Karur Vysya Bank (KVB) debit SMS with counterparty and balance', () {
+      const smsBody =
+          'Dear Customer, INR 1,250.00 debited from A/c XX8921 on 18-Oct-26 towards UPI/Ref 628168613199 to Swiggy. Avl Bal INR 18,450.00 - Karur Vysya Bank';
+      final parsed = BankSmsParserService.parseSms(
+        address: 'AD-KVBANK',
+        body: smsBody,
+      );
+
+      expect(parsed, isNotNull);
+      expect(parsed!.bankName, 'Karur Vysya Bank');
+      expect(parsed.transaction.amount, 1250.0);
+      expect(parsed.transaction.type, TransactionType.EXPENSE);
+      expect(parsed.maskedAccount, '•••• 8921');
+      expect(parsed.availableBalanceAfter, 18450.0);
+    });
+
+    test('16. Parses Karur Vysya Bank (KVB) credit SMS correctly', () {
+      const smsBody =
+          'Your A/c ending with XX8921 is credited by Rs 15,000.00 on 18-Oct-26 from Ramesh Kumar via UPI Ref 628168613200. Avl Bal Rs 33,450.00 - KVB';
+      final parsed = BankSmsParserService.parseSms(
+        address: 'VM-KVBSMS',
+        body: smsBody,
+      );
+
+      expect(parsed, isNotNull);
+      expect(parsed!.bankName, 'Karur Vysya Bank');
+      expect(parsed.transaction.amount, 15000.0);
+      expect(parsed.transaction.type, TransactionType.INCOME);
+      expect(parsed.transaction.sender, 'Ramesh Kumar');
+      expect(parsed.maskedAccount, '•••• 8921');
+      expect(parsed.availableBalanceAfter, 33450.0);
+    });
   });
 }

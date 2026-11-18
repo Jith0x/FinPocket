@@ -28,9 +28,14 @@ router.post('/consent/request', authMiddleware, async (req: AuthRequest, res: Re
       message: 'Consent request initiated successfully.'
     });
   } catch (err: any) {
+    console.error('[AA Consent Error]:', err);
+    const msg = (err?.message || '').toString();
+    const isInternalDbError = /sqlite|postgres|sql|select|insert|update|delete|table|column|syntax|repositor|dialect|relation|database|constraint|violat/i.test(msg);
     return res.status(500).json({
       code: 'AA_CONSENT_ERROR',
-      message: err.message || 'Failed to initiate consent request.'
+      message: isInternalDbError || !msg
+        ? 'Failed to initiate consent request. Please try again later.'
+        : msg
     });
   }
 });

@@ -630,8 +630,8 @@ router.put('/upi-id', authMiddleware, async (req: AuthRequest, res: Response): P
 router.post('/update-pin', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { newPin } = req.body;
-    if (!newPin || newPin.length < 4) {
-      res.status(400).json({ error: 'PIN must be at least 4 digits.' });
+    if (!newPin || newPin.length < 6) {
+      res.status(400).json({ error: 'Password must be at least 6 digits.' });
       return;
     }
 

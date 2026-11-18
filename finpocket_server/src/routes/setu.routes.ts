@@ -222,9 +222,14 @@ router.post('/consent/request', authMiddleware, async (req: AuthRequest, res: Re
       message: 'Setu consent request initiated successfully.'
     });
   } catch (err: any) {
+    console.error('[Setu Consent Error]:', err);
+    const msg = (err?.message || '').toString();
+    const isInternalDbError = /sqlite|postgres|sql|select|insert|update|delete|table|column|syntax|repositor|dialect|relation|database|constraint|violat/i.test(msg);
     return res.status(500).json({
       code: 'SETU_CONSENT_ERROR',
-      message: err.message || 'Failed to initiate Setu consent request.'
+      message: isInternalDbError || !msg
+        ? 'Failed to initiate bank consent request. Please try again later.'
+        : msg
     });
   }
 });

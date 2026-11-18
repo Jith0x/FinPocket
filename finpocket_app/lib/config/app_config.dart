@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
-
 enum AppEnvironment {
   development,
   test,
@@ -95,7 +93,7 @@ class AppConfig {
       }
     }
 
-    // 3. Environment defaults: Production and Staging always use the live 24/7 Render cloud backend.
+    // 3. Environment defaults: Live verified cloud endpoint with SSL (Render 24/7 backend)
     switch (environment) {
       case AppEnvironment.production:
       case AppEnvironment.staging:
@@ -103,9 +101,6 @@ class AppConfig {
       case AppEnvironment.development:
       case AppEnvironment.demo:
       case AppEnvironment.test:
-        if (kIsWeb) return 'https://finpocket-52hh.onrender.com/api/v1';
-        // On physical devices, loopback connects to the phone itself where no server runs.
-        // Defaulting to the live cloud backend ensures immediate out-of-the-box connectivity.
         return 'https://finpocket-52hh.onrender.com/api/v1';
     }
   }

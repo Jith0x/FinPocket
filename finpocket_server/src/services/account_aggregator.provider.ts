@@ -8,6 +8,7 @@ import { runQuery, getQuery, allQuery } from '../config/database.js';
 import { config } from '../config/app_config.js';
 import { withRedirectState } from '../utils/redirect_state.js';
 import { ReBITConsentRequestDTO, ReBITConsentResponseDTO } from './aa_provider.interface.js';
+import { AccountConsentEntity } from '../repositories/repository.interface.js';
 
 export interface CircuitBreakerState {
   state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
@@ -162,9 +163,29 @@ export class AccountAggregatorProvider implements FinancialDataProvider {
                      institutionCode === 'UTIB' ? 'Axis Bank' : 'HDFC Bank';
     const accountId = `bnk_aa_${institutionCode.toLowerCase()}_${uuidv4().substring(0, 6)}`;
     const consentHandle = `AA_CONSENT_${uuidv4()}`;
+    const masked = `PENDING ${accountId.substring(accountId.length - 6)}`;
+    const initialBalance = 0.0;
+
+    // First connected account becomes primary:
+    const existingPrimary = await getQuery<{ id: string }>(
+      'SELECT id FROM bank_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1',
+      [userId]
+    );
+    const isFirstAccount = !existingPrimary;
+
+    await runQuery(`
+      INSERT INTO bank_accounts (id, user_id, institution_name, institution_code, masked_account_number, account_type, current_balance, available_balance, is_primary, connection_status, provider_type, last_synced_at)
+      VALUES (?, ?, ?, ?, ?, 'SAVINGS', ?, ?, ?, 'PENDING', ?, ?)
+    `, [accountId, userId, instName, institutionCode, masked, initialBalance, initialBalance, isFirstAccount ? 1 : 0, config.aaProvider.providerName, now]);
 
     // Create pending consent artifact
-    const consentRecord = await ConsentService.requestConsent(userId, accountId, consentHandle);
+    let consentRecord: AccountConsentEntity;
+    try {
+      consentRecord = await ConsentService.requestConsent(userId, accountId, consentHandle);
+    } catch (consentErr) {
+      await runQuery('DELETE FROM bank_accounts WHERE id = ?', [accountId]).catch(() => {});
+      throw consentErr;
+    }
 
     // Construct ReBIT-compliant Consent Request DTO
     const consentRequestDTO: ReBITConsentRequestDTO = {
@@ -193,118 +214,114 @@ export class AccountAggregatorProvider implements FinancialDataProvider {
     };
 
     // Dispatch request through retry handler
-    const providerResponse: ReBITConsentResponseDTO = await this.executeWithRetry(async () => {
-      if (this.httpMockHandler) {
-        return await this.httpMockHandler(`${config.aaProvider.apiBaseUrl}/v2/consents`, {
-          method: 'POST',
-          body: consentRequestDTO
-        });
-      }
-
-      // Setu is used whenever real credentials are present — the environment
-      // (SANDBOX vs PRODUCTION) only selects the base URLs, configured in
-      // app_config. Gating on 'SANDBOX' here would silently disable the live
-      // Setu path in production (a dead wire).
-      if (config.aaProvider.setu.clientId && config.aaProvider.setu.clientSecret) {
-        try {
-          const token = await this.getSetuOAuthToken();
-          const redirectBase = config.aaProvider.setu.redirectBaseUrl || config.aaProvider.redirectUri;
-          if (!redirectBase) {
-            // Fail closed: consent flows must return to a URL we configured —
-            // never to a committed third-party tunnel.
-            throw new Error('Setu redirect URL is not configured (set SETU_REDIRECT_BASE_URL).');
-          }
-          // Signed state: the browser return is unauthenticated, so every
-          // redirect URL we hand the provider carries an HMAC over the local
-          // consent id (verified before any status mutation on return).
-          const redirectUrl = withRedirectState(`${redirectBase}/api/v1/setu/redirect`, consentRecord.id);
-          const fromDate = new Date(Date.now() - 90 * 86400000).toISOString().split('.')[0] + 'Z';
-          const toDate = new Date().toISOString().split('.')[0] + 'Z';
-
-          // The account holder's registered mobile (entered by the user in the
-          // app) identifies the account at the aggregator — never a made-up VUA.
-          const resolvedVua = (mobileNumber && /^[6-9]\d{9}$/.test(mobileNumber))
-                              ? `${mobileNumber}@onemoney`
-                              : config.aaProvider.setu.testVua || 
-                              (config.aaProvider.setu.testPhoneNumber ? `${config.aaProvider.setu.testPhoneNumber}@onemoney` : undefined) ||
-                              process.env.SETU_TEST_VUA ||
-                              process.env.VUA ||
-                              (process.env.VUA_MOBILE_NUMBER ? `${process.env.VUA_MOBILE_NUMBER}@onemoney` : undefined) ||
-                              (process.env.SETU_TEST_PHONE_NUMBER ? `${process.env.SETU_TEST_PHONE_NUMBER}@onemoney` : undefined);
-          if (!resolvedVua) {
-            // Fail closed: never invent an account-holder identity for AA consent.
-            throw new Error('No VUA available for consent request: the user has no verified mobile number and SETU_TEST_VUA is not configured.');
-          }
-
-          const livePayload = {
-            vua: resolvedVua,
-            dataRange: { from: fromDate, to: toDate },
-            consentDuration: { unit: 'MONTH', value: '12' },
-            dataLife: { unit: 'DAY', value: 0 },
-            redirectUrl
-          };
-
-          const res = await fetch(`${config.aaProvider.setu.apiBaseUrl}/v2/consents`, {
+    let providerResponse: ReBITConsentResponseDTO;
+    try {
+      providerResponse = await this.executeWithRetry(async () => {
+        if (this.httpMockHandler) {
+          return await this.httpMockHandler(`${config.aaProvider.apiBaseUrl}/v2/consents`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-              'x-product-instance-id': config.aaProvider.setu.productInstanceId
-            },
-            signal: AbortSignal.timeout(15000),
-            body: JSON.stringify(livePayload)
+            body: consentRequestDTO
           });
-
-          if (res.ok) {
-            const liveData = await res.json() as any;
-            const liveHandle = liveData.id || liveData.consentId || consentHandle;
-            // Update consent record with live Setu handle
-            await runQuery('UPDATE account_consents SET consent_handle = ? WHERE id = ?', [liveHandle, consentRecord.id]);
-            return {
-              ver: '2.1.0',
-              timestamp: now,
-              txnId: liveHandle,
-              consentHandle: liveHandle,
-              status: 'PENDING',
-              redirectUrl: liveData.url || liveData.redirectUrl
-            };
-          }
-        } catch (liveErr) {
-          // In test/sandbox fallback if network fails
         }
-      }
 
-      const fallbackRedirect = config.aaProvider.redirectUri
-        ? withRedirectState(config.aaProvider.redirectUri, consentRecord.id)
-        : config.aaProvider.redirectUri;
-      return {
-        ver: '1.1.2',
-        timestamp: now,
-        txnId: consentRequestDTO.txnId,
-        consentHandle,
-        status: 'PENDING',
-        redirectUrl: `${config.aaProvider.apiBaseUrl}/consent?handle=${consentHandle}&redirect=${encodeURIComponent(fallbackRedirect)}`
-      };
-    });
+        // Setu is used whenever real credentials are present — the environment
+        // (SANDBOX vs PRODUCTION) only selects the base URLs, configured in
+        // app_config. Gating on 'SANDBOX' here would silently disable the live
+        // Setu path in production (a dead wire).
+        if (config.aaProvider.setu.clientId && config.aaProvider.setu.clientSecret) {
+          try {
+            const token = await this.getSetuOAuthToken();
+            const redirectBase = config.aaProvider.setu.redirectBaseUrl || config.aaProvider.redirectUri;
+            if (!redirectBase) {
+              // Fail closed: consent flows must return to a URL we configured —
+              // never to a committed third-party tunnel.
+              throw new Error('Setu redirect URL is not configured (set SETU_REDIRECT_BASE_URL).');
+            }
+            // Signed state: the browser return is unauthenticated, so every
+            // redirect URL we hand the provider carries an HMAC over the local
+            // consent id (verified before any status mutation on return).
+            const redirectUrl = withRedirectState(`${redirectBase}/api/v1/setu/redirect`, consentRecord.id);
+            const fromDate = new Date(Date.now() - 90 * 86400000).toISOString().split('.')[0] + 'Z';
+            const toDate = new Date().toISOString().split('.')[0] + 'Z';
 
-    // Store initial account with PENDING status until consent is approved.
-    // Real-data rule: a brand-new account always starts at ₹0 — the balance is
-    // only written once the bank actually reports one.
-    const masked = `PENDING ${accountId.substring(accountId.length - 6)}`;
-    const initialBalance = 0.0;
+            // The account holder's registered mobile (entered by the user in the
+            // app) identifies the account at the aggregator — never a made-up VUA.
+            const resolvedVua = (mobileNumber && /^[6-9]\d{9}$/.test(mobileNumber))
+                                ? `${mobileNumber}@onemoney`
+                                : config.aaProvider.setu.testVua || 
+                                (config.aaProvider.setu.testPhoneNumber ? `${config.aaProvider.setu.testPhoneNumber}@onemoney` : undefined) ||
+                                process.env.SETU_TEST_VUA ||
+                                process.env.VUA ||
+                                (process.env.VUA_MOBILE_NUMBER ? `${process.env.VUA_MOBILE_NUMBER}@onemoney` : undefined) ||
+                                (process.env.SETU_TEST_PHONE_NUMBER ? `${process.env.SETU_TEST_PHONE_NUMBER}@onemoney` : undefined);
+            if (!resolvedVua) {
+              // Fail closed: never invent an account-holder identity for AA consent.
+              throw new Error('No VUA available for consent request: the user has no verified mobile number and SETU_TEST_VUA is not configured.');
+            }
 
-    // First connected account becomes primary (see MockFinancialDataProvider):
-    // consumers like EF deposit/bills/payments look up is_primary = 1.
-    const existingPrimary = await getQuery<{ id: string }>(
-      'SELECT id FROM bank_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1',
-      [userId]
-    );
-    const isFirstAccount = !existingPrimary;
+            const livePayload = {
+              vua: resolvedVua,
+              dataRange: { from: fromDate, to: toDate },
+              consentDuration: { unit: 'MONTH', value: '12' },
+              dataLife: { unit: 'DAY', value: 0 },
+              redirectUrl
+            };
 
-    await runQuery(`
-      INSERT INTO bank_accounts (id, user_id, institution_name, institution_code, masked_account_number, account_type, current_balance, available_balance, is_primary, connection_status, provider_type, last_synced_at)
-      VALUES (?, ?, ?, ?, ?, 'SAVINGS', ?, ?, ?, 'PENDING', ?, ?)
-    `, [accountId, userId, instName, institutionCode, masked, initialBalance, initialBalance, isFirstAccount ? 1 : 0, config.aaProvider.providerName, now]);
+            const res = await fetch(`${config.aaProvider.setu.apiBaseUrl}/v2/consents`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'x-product-instance-id': config.aaProvider.setu.productInstanceId
+              },
+              signal: AbortSignal.timeout(15000),
+              body: JSON.stringify(livePayload)
+            });
+
+            if (res.ok) {
+              const liveData = await res.json() as any;
+              const liveHandle = liveData.id || liveData.consentId || consentHandle;
+              // Update consent record with live Setu handle
+              await runQuery('UPDATE account_consents SET consent_handle = ? WHERE id = ?', [liveHandle, consentRecord.id]);
+              return {
+                ver: '2.1.0',
+                timestamp: now,
+                txnId: liveHandle,
+                consentHandle: liveHandle,
+                status: 'PENDING',
+                redirectUrl: liveData.url || liveData.redirectUrl
+              };
+            } else {
+              const errText = await res.text();
+              let parsedMsg = `Setu AA consent request failed (HTTP ${res.status})`;
+              try {
+                const j = JSON.parse(errText);
+                parsedMsg = j.message || j.error || j.detail || parsedMsg;
+              } catch (_) {}
+              throw new Error(parsedMsg);
+            }
+          } catch (liveErr: any) {
+            throw liveErr;
+          }
+        }
+
+        const fallbackRedirect = config.aaProvider.redirectUri
+          ? withRedirectState(config.aaProvider.redirectUri, consentRecord.id)
+          : config.aaProvider.redirectUri;
+        return {
+          ver: '1.1.2',
+          timestamp: now,
+          txnId: consentRequestDTO.txnId,
+          consentHandle,
+          status: 'PENDING',
+          redirectUrl: `${config.aaProvider.apiBaseUrl}/consent?handle=${consentHandle}&redirect=${encodeURIComponent(fallbackRedirect)}`
+        };
+      });
+    } catch (execErr) {
+      await runQuery('DELETE FROM account_consents WHERE id = ?', [consentRecord.id]).catch(() => {});
+      await runQuery('DELETE FROM bank_accounts WHERE id = ?', [accountId]).catch(() => {});
+      throw execErr;
+    }
 
     // Store encrypted provider token.
     // Column names follow the provider_connections schema / repository

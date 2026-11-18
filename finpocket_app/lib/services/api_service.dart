@@ -79,7 +79,12 @@ class ApiService {
   // ==========================================
 
   static List<String> get _candidateHosts {
-    if (kIsWeb) return ['https://finpocket-52hh.onrender.com/api/v1', 'http://localhost:3001/api/v1'];
+    if (kIsWeb) {
+      return [
+        'https://finpocket-52hh.onrender.com/api/v1',
+        'http://localhost:3001/api/v1',
+      ];
+    }
     return [
       'https://finpocket-52hh.onrender.com/api/v1',
       'http://127.0.0.1:3001/api/v1',
@@ -100,14 +105,11 @@ class ApiService {
 
     final saved = await SecureTokenStorage.getCustomApiUrl();
     if (saved != null && saved.isNotEmpty) {
-      // Validate that saved URL is not a dead loopback from a previous debug session
-      if (!saved.contains('127.0.0.1') && !saved.contains('localhost') && !saved.contains('192.168.')) {
-        AppConfig.customApiBaseUrl = saved;
-        return saved;
-      }
+      AppConfig.customApiBaseUrl = saved;
+      return saved;
     }
 
-    // Default to the live Render cloud backend
+    // Default to the live verified HTTPS backend
     AppConfig.customApiBaseUrl = AppConfig.apiBaseUrl;
     return AppConfig.apiBaseUrl;
   }
@@ -135,20 +137,20 @@ class ApiService {
             headers: reqHeaders,
             body: payload,
           )
-          .timeout(const Duration(seconds: 40));
+          .timeout(const Duration(seconds: 15));
     }
 
-    // Unconfigured dev builds: probe the candidates (cloud first, then local loopback)
+    // Unconfigured dev builds: probe the candidates (tunnel/cloud first, then local loopback)
     Object? lastError;
     for (final host in _candidateHosts) {
       try {
         final res = await http
-            .post(
-              Uri.parse('$host$endpoint'),
-              headers: reqHeaders,
-              body: payload,
-            )
-            .timeout(const Duration(seconds: 40));
+          .post(
+            Uri.parse('$host$endpoint'),
+            headers: reqHeaders,
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 8));
 
         AppConfig.customApiBaseUrl = host;
         await SecureTokenStorage.saveCustomApiUrl(host);
@@ -861,6 +863,15 @@ class ApiService {
     });
   }
 
+  static Future<void> disconnectAccount(String accountId) async {
+    await _sendWithAuth((headers) {
+      return http.post(
+        Uri.parse('$baseUrl/accounts/$accountId/disconnect'),
+        headers: headers,
+      );
+    });
+  }
+
   static Future<Map<String, dynamic>> connectMockAccount(String institutionCode) async {
     final response = await _sendWithAuth((headers) {
       return http.post(
@@ -967,18 +978,64 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  static Future<void> depositEmergencyFund(double amount) async {
+  static dynamic _safeJsonDecode(String body) {
+    try {
+      final trimmed = body.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        return jsonDecode(trimmed);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  static Future<void> depositEmergencyFund(double amount, {String? bankName, String? fundingSource}) async {
     final response = await _sendWithAuth((headers) {
       return http.post(
         Uri.parse('$baseUrl/savings/emergency-fund/deposit'),
         headers: headers,
-        body: jsonEncode({'amount': amount}),
+        body: jsonEncode({
+          'amount': amount,
+          if (bankName != null) 'bankName': bankName,
+          if (fundingSource != null) 'fundingSource': fundingSource,
+        }),
       );
     });
     if (response.statusCode != 200) {
-      final err = jsonDecode(response.body)['error'];
-      throw Exception(err ?? 'Deposit failed');
+      final parsed = _safeJsonDecode(response.body);
+      final err = (parsed is Map ? parsed['error'] : null) ?? 'Deposit failed (HTTP ${response.statusCode})';
+      throw Exception(err);
     }
+  }
+
+  static Future<Map<String, dynamic>> linkInstantAccount({
+    required String institutionName,
+    String? institutionCode,
+    String? maskedAccountNumber,
+    double? initialBalance,
+    String? accountType,
+  }) async {
+    final response = await _sendWithAuth((headers) {
+      return http.post(
+        Uri.parse('$baseUrl/accounts/instant-link'),
+        headers: headers,
+        body: jsonEncode({
+          'institutionName': institutionName,
+          'institutionCode': institutionCode ?? 'INSTANT',
+          'maskedAccountNumber': maskedAccountNumber,
+          'initialBalance': initialBalance,
+          'accountType': accountType ?? 'SAVINGS',
+        }),
+      );
+    });
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      final parsed = _safeJsonDecode(response.body);
+      if (parsed is Map<String, dynamic>) return parsed;
+      if (parsed is Map) return Map<String, dynamic>.from(parsed);
+      return {'success': true};
+    }
+    final parsed = _safeJsonDecode(response.body);
+    final err = (parsed is Map ? parsed['error'] : null) ?? 'Failed to link account (HTTP ${response.statusCode})';
+    throw Exception(err);
   }
 
   static Future<void> withdrawEmergencyFund(double amount, String reason, String pin) async {
@@ -990,8 +1047,9 @@ class ApiService {
       );
     });
     if (response.statusCode != 200) {
-      final err = jsonDecode(response.body)['error'];
-      throw Exception(err ?? 'Withdrawal failed');
+      final parsed = _safeJsonDecode(response.body);
+      final err = (parsed is Map ? parsed['error'] : null) ?? 'Withdrawal failed (HTTP ${response.statusCode})';
+      throw Exception(err);
     }
   }
 
@@ -1276,7 +1334,15 @@ class ApiService {
         }),
       );
     });
-    return jsonDecode(response.body);
+    final parsed = _safeJsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (parsed is Map<String, dynamic>) return parsed;
+      if (parsed is Map) return Map<String, dynamic>.from(parsed);
+      return {'status': 'SUCCESS'};
+    }
+    final msg = (parsed is Map ? parsed['message'] ?? parsed['error'] : null) ??
+        'Failed to initiate consent (HTTP ${response.statusCode})';
+    throw Exception(msg);
   }
 
   static Future<Map<String, dynamic>> getSetuConsentStatus(String consentHandle) async {

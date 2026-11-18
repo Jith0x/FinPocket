@@ -436,6 +436,28 @@ class RecurringPayment {
 
   String get title => name;
   bool get isPaid => isPaidThisMonth;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'amount': amount,
+        'dueDate': dueDate.toIso8601String(),
+        'category': category,
+        'recurrence': recurrence,
+        'isPaidThisMonth': isPaidThisMonth,
+        'lastPaidDate': lastPaidDate?.toIso8601String(),
+      };
+
+  factory RecurringPayment.fromJson(Map<String, dynamic> json) => RecurringPayment(
+        id: json['id']?.toString() ?? '',
+        name: json['name']?.toString() ?? 'Bill',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
+        dueDate: DateTime.tryParse(json['dueDate']?.toString() ?? '') ?? DateTime.now(),
+        category: json['category']?.toString() ?? 'Utility',
+        recurrence: json['recurrence']?.toString() ?? 'MONTHLY',
+        isPaidThisMonth: json['isPaidThisMonth'] == true,
+        lastPaidDate: json['lastPaidDate'] != null ? DateTime.tryParse(json['lastPaidDate'].toString()) : null,
+      );
 }
 
 typedef Bill = RecurringPayment;

@@ -4,6 +4,7 @@ import { CalculationsService } from '../services/calculations.service.js';
 import { FinancialInsightsService } from '../services/financial_insights.service.js';
 import { FinancialPlanningService } from '../services/financial_planning.service.js';
 import { allQuery } from '../config/database.js';
+import { config } from '../config/app_config.js';
 
 const router = Router();
 
@@ -38,7 +39,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res: Response):
       CalculationsService.getSavingsGoalsIntelligence(userId),
       FinancialInsightsService.generateInsights(userId),
       FinancialInsightsService.generateDailyBrief(userId),
-      allQuery('SELECT * FROM bank_accounts WHERE user_id = ? ORDER BY is_primary DESC', [userId]),
+      allQuery("SELECT * FROM bank_accounts WHERE user_id = ? AND connection_status = 'CONNECTED' AND masked_account_number NOT LIKE 'PENDING%' ORDER BY is_primary DESC", [userId]),
       allQuery(
         `SELECT t.*, c.name as category_name, c.color as category_color, c.icon as category_icon 
          FROM transactions t 
@@ -71,7 +72,7 @@ router.get('/overview', authMiddleware, async (req: AuthRequest, res: Response):
       dailyBrief,
       bankAccounts,
       recentTransactions,
-      isMockMode: true
+      isMockMode: config.environment === 'DEMO'
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

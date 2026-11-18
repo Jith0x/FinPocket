@@ -21,7 +21,7 @@
         <domain includeSubdomains="false">[::1]</domain>
     </domain-config>
 
-    <base-config cleartextTrafficPermitted="false">
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

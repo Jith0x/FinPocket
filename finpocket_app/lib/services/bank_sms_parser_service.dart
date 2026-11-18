@@ -152,31 +152,35 @@ class BankSmsParserService {
     return parsedList;
   }
 
-  /// Verification used by the Connect Bank flow: how many messages on *this
-  /// device* plausibly come from [bankLabel]?
+  /// Verification used by the Connect Bank flow: how many valid parsed bank
+  /// transactions on *this device* plausibly belong to [bankLabel]?
   ///
-  /// Matched by the bank's sender-ID prefixes (e.g. `HDFCBK`) and/or the bank
-  /// name appearing in the message body. An empty [senderKeys] means "any
-  /// bank SMS" (the 'Other bank' option) — counted via parseable transactions.
-  /// This is real on-device evidence, never a claim of account ownership.
+  /// Matches on actual parsed financial transactions (amount, type, account)
+  /// rather than raw text, ensuring OTPs, spam, and non-transactional messages
+  /// never fabricate evidence of a bank account.
   static Future<int> countSmsForBank(String bankLabel, List<String> senderKeys) async {
     if (kIsWeb || !Platform.isAndroid) return 0;
 
+    final parsedList = await fetchAndParseBankSms(limit: 300);
+    if (parsedList.isEmpty) return 0;
+
     if (senderKeys.isEmpty) {
-      final parsed = await fetchAndParseBankSms(limit: 300);
-      return parsed.length;
+      // "Other bank": return count of any parsed bank transactions
+      return parsedList.length;
     }
 
-    final msgs = await fetchRawSms(limit: 300);
-    final labelUpper = bankLabel.toUpperCase();
-    final keysUpper = senderKeys.map((k) => k.toUpperCase()).toList();
+    final cleanLabel = bankLabel.toUpperCase().replaceAll(RegExp(r'\s+BANK.*$'), '').trim();
+    final keysUpper = senderKeys.map((k) => k.toUpperCase().trim()).where((k) => k.isNotEmpty).toList();
     var count = 0;
-    for (final m in msgs) {
-      final addr = (m['address'] ?? '').toUpperCase();
-      final bodyU = (m['body'] ?? '').toUpperCase();
-      final bySender = keysUpper.any((k) => k.isNotEmpty && addr.contains(k));
-      final byBody = bodyU.contains(labelUpper);
-      if (bySender || byBody) count++;
+    for (final p in parsedList) {
+      final bankUpper = p.bankName.toUpperCase();
+      final senderUpper = p.transaction.sender.toUpperCase();
+
+      final bySender = keysUpper.any((k) => senderUpper.contains(k));
+      final byBankName = cleanLabel.isNotEmpty && bankUpper.contains(cleanLabel);
+      if (bySender || byBankName) {
+        count++;
+      }
     }
     return count;
   }
@@ -285,40 +289,64 @@ class BankSmsParserService {
     // Central Bank of India
     'CBISMS': 'Central Bank of India',
     'CENTBK': 'Central Bank of India',
+    'CBINBK': 'Central Bank of India',
+    'CBIN': 'Central Bank of India',
     // UCO Bank
     'UCOBNK': 'UCO Bank',
     'UCOSMS': 'UCO Bank',
+    'UCBA': 'UCO Bank',
     // Bank of Maharashtra
     'MAHABK': 'Bank of Maharashtra',
     'BOMBNK': 'Bank of Maharashtra',
+    'MAHB': 'Bank of Maharashtra',
     // Indian Overseas Bank
     'IOBCHN': 'Indian Overseas Bank',
     'IOBBNK': 'Indian Overseas Bank',
+    'IOBSMS': 'Indian Overseas Bank',
+    'IOBA': 'Indian Overseas Bank',
     // Punjab & Sind Bank
     'PSBBNK': 'Punjab & Sind Bank',
     'PSBSMS': 'Punjab & Sind Bank',
+    'PSIB': 'Punjab & Sind Bank',
     // RBL Bank
     'RBLBNK': 'RBL Bank',
     'RATNAK': 'RBL Bank',
+    'RBLSMS': 'RBL Bank',
+    'RATN': 'RBL Bank',
     // Karur Vysya Bank
-    'KVBBANK': 'Karur Vysya Bank',
+    'KVBANK': 'Karur Vysya Bank',
     'KVBSMS': 'Karur Vysya Bank',
+    'KVBLBK': 'Karur Vysya Bank',
+    'KVBBANK': 'Karur Vysya Bank',
+    'KVBLTD': 'Karur Vysya Bank',
+    'KVBL': 'Karur Vysya Bank',
+    'KVB': 'Karur Vysya Bank',
     // South Indian Bank
     'SIBLTD': 'South Indian Bank',
     'SIBBNK': 'South Indian Bank',
+    'SIBSMS': 'South Indian Bank',
+    'SIB': 'South Indian Bank',
     // City Union Bank
     'CUBBNK': 'City Union Bank',
+    'CUBSMS': 'City Union Bank',
+    'CIUB': 'City Union Bank',
     // Jammu & Kashmir Bank
     'JKBANK': 'Jammu & Kashmir Bank',
     // AU Small Finance Bank
     'AUBANK': 'AU Small Finance Bank',
+    'AUBSMS': 'AU Small Finance Bank',
+    'AUBL': 'AU Small Finance Bank',
     // Equitas Small Finance Bank
     'EQITAS': 'Equitas Small Finance Bank',
+    'EQSMS': 'Equitas Small Finance Bank',
+    'ESFB': 'Equitas Small Finance Bank',
     // Ujjivan Small Finance Bank
     'UJJIVN': 'Ujjivan Small Finance Bank',
     // Bandhan Bank
     'BNDHAN': 'Bandhan Bank',
     'BNDHN': 'Bandhan Bank',
+    'BDBLBK': 'Bandhan Bank',
+    'BDBL': 'Bandhan Bank',
     // Standard Chartered
     'SCISMS': 'Standard Chartered',
     'SCBLTD': 'Standard Chartered',
@@ -332,12 +360,15 @@ class BankSmsParserService {
     'DIGIBK': 'DBS Bank',
     // India Post Payments Bank
     'IPPBMS': 'India Post Payments Bank',
+    'IPPBBK': 'India Post Payments Bank',
     'IPPB': 'India Post Payments Bank',
     // Paytm Payments Bank
     'PAYTMB': 'Paytm Payments Bank',
+    'PAYTM': 'Paytm Payments Bank',
     // Airtel Payments Bank
     'AIRBNK': 'Airtel Payments Bank',
     'AIRPAY': 'Airtel Payments Bank',
+    'AIRP': 'Airtel Payments Bank',
     // Jupiter / Fi / Federal
     'JUPITR': 'Federal Bank (Jupiter)',
     'FIBANK': 'Federal Bank (Fi)',
@@ -463,7 +494,11 @@ class BankSmsParserService {
     // 11. Extract Available Balance after transaction
     double? avlBal;
     final balMatch = RegExp(
-      r'(?:avl|avail|available)\s*(?:bal|balance|limit)?\s*(?:is|:)?\s*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)',
+      r'(?:(?:avl|avail|available|total|clr|clear|net)\s*)?(?:bal|balance|limit)\s*(?:is|:)?\s*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)',
+      caseSensitive: false,
+    ).firstMatch(body) ??
+    RegExp(
+      r'(?:avl|avail|available)\s*(?:is|:)?\s*(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)',
       caseSensitive: false,
     ).firstMatch(body);
     if (balMatch != null) {
@@ -627,7 +662,7 @@ class BankSmsParserService {
 
     // 2. Strict bank sign-off check in the message body ONLY IF the sender address
     // indicates a financial/banking entity (contains BANK, BK, or NB).
-    if (addrUpper.contains('BANK') || addrUpper.contains('BK') || addrUpper.contains('NB')) {
+    if (addrUpper.contains('BANK') || addrUpper.contains('BK') || addrUpper.contains('NB') || addrUpper.contains('SMS')) {
       if (bodyUpper.contains('INDIAN BANK') || bodyUpper.contains('INDBNK')) return 'Indian Bank';
       if (bodyUpper.contains('STATE BANK') || bodyUpper.contains('SBI')) return 'State Bank of India';
       if (bodyUpper.contains('HDFC')) return 'HDFC Bank';
@@ -645,6 +680,20 @@ class BankSmsParserService {
       if (bodyUpper.contains('FEDERAL BANK')) return 'Federal Bank';
       if (bodyUpper.contains('IDBI')) return 'IDBI Bank';
       if (bodyUpper.contains('PAYTM')) return 'Paytm Payments Bank';
+      if (bodyUpper.contains('KARUR VYSYA') || bodyUpper.contains('KVB')) return 'Karur Vysya Bank';
+      if (bodyUpper.contains('CENTRAL BANK') || bodyUpper.contains('CBIN')) return 'Central Bank of India';
+      if (bodyUpper.contains('INDIAN OVERSEAS') || bodyUpper.contains('IOB')) return 'Indian Overseas Bank';
+      if (bodyUpper.contains('UCO BANK') || bodyUpper.contains('UCO')) return 'UCO Bank';
+      if (bodyUpper.contains('SOUTH INDIAN') || bodyUpper.contains('SIB')) return 'South Indian Bank';
+      if (bodyUpper.contains('BANK OF MAHARASHTRA') || bodyUpper.contains('MAHABK')) return 'Bank of Maharashtra';
+      if (bodyUpper.contains('PUNJAB & SIND') || bodyUpper.contains('PSB')) return 'Punjab & Sind Bank';
+      if (bodyUpper.contains('RBL BANK') || bodyUpper.contains('RBL')) return 'RBL Bank';
+      if (bodyUpper.contains('BANDHAN BANK') || bodyUpper.contains('BANDHAN')) return 'Bandhan Bank';
+      if (bodyUpper.contains('CITY UNION') || bodyUpper.contains('CUB')) return 'City Union Bank';
+      if (bodyUpper.contains('AU SMALL') || bodyUpper.contains('AU BANK')) return 'AU Small Finance Bank';
+      if (bodyUpper.contains('EQUITAS')) return 'Equitas Small Finance Bank';
+      if (bodyUpper.contains('AIRTEL')) return 'Airtel Payments Bank';
+      if (bodyUpper.contains('INDIA POST') || bodyUpper.contains('IPPB')) return 'India Post Payments Bank';
     }
 
     // No official bank matched -> strictly null

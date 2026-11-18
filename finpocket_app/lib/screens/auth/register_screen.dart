@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../services/security_auth_service.dart';
 import '../../widgets/auth/captcha_widget.dart';
 import '../../widgets/auth/otp_verification_sheet.dart';
+import '../../widgets/common/brand_logo.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -734,16 +735,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.gradientPrimary,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('💰', style: TextStyle(fontSize: 18)),
-                    ),
+                    const FinPocketLogo(size: 32, hasGlow: false),
                     const SizedBox(width: 8),
                     ShaderMask(
                       shaderCallback: (bounds) => AppTheme.gradientPrimary.createShader(bounds),

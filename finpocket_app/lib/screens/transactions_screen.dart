@@ -348,8 +348,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   // Download-only: save to app documents AND Downloads.
                   await FileShareService.downloadToDownloads(file.path);
                   final fileName = file.path.split(RegExp(r'[/\\]')).last;
-                  snack(
-                      '✅ Statement saved to your phone\'s Downloads folder! ($fileName)');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('✅ Downloaded: $fileName'),
+                        backgroundColor: const Color(0xFF10B981),
+                        duration: const Duration(seconds: 8),
+                        action: SnackBarAction(
+                          label: 'OPEN FILE',
+                          textColor: Colors.white,
+                          onPressed: () => FileShareService.openFile(file.path),
+                        ),
+                      ),
+                    );
+                  }
+                  await FileShareService.openFile(file.path);
                 }
               } catch (e) {
                 snack('Could not generate the statement: $e', ok: false);

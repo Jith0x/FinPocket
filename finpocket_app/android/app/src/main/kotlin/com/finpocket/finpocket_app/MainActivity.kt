@@ -140,9 +140,110 @@ class MainActivity : FlutterFragmentActivity() {
                             savedUri = android.net.Uri.fromFile(destFile)
                         }
 
+                        // 3. Post system notification so user can tap in notification bar to choose app and view file
+                        try {
+                            val notifyManager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                            val channelId = "statement_downloads"
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                                val channel = android.app.NotificationChannel(
+                                    channelId,
+                                    "Statement Downloads",
+                                    android.app.NotificationManager.IMPORTANCE_HIGH
+                                ).apply {
+                                    description = "Notifications for downloaded statement files"
+                                    enableVibration(true)
+                                    enableLights(true)
+                                }
+                                notifyManager.createNotificationChannel(channel)
+                            }
+                            val openFileUri = androidx.core.content.FileProvider.getUriForFile(
+                                this,
+                                "${packageName}.fileprovider",
+                                srcFile
+                            )
+                            val openIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(openFileUri, mimeType)
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            val resList = packageManager.queryIntentActivities(openIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                            for (resolveInfo in resList) {
+                                val pkg = resolveInfo.activityInfo.packageName
+                                grantUriPermission(pkg, openFileUri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            val chooserIntent = android.content.Intent.createChooser(openIntent, "Open $fileName with").apply {
+                                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            val pendingIntent = android.app.PendingIntent.getActivity(
+                                this,
+                                (System.currentTimeMillis() % 10000).toInt(),
+                                chooserIntent,
+                                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+                            )
+                            val notifBuilder = androidx.core.app.NotificationCompat.Builder(this, channelId)
+                                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                                .setContentTitle("Statement Downloaded")
+                                .setContentText("$fileName - Tap to choose app and view")
+                                .setAutoCancel(true)
+                                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                                .setDefaults(androidx.core.app.NotificationCompat.DEFAULT_ALL)
+                                .setContentIntent(pendingIntent)
+
+                            notifyManager.notify((System.currentTimeMillis() % 10000).toInt(), notifBuilder.build())
+                        } catch (notifEx: Exception) {
+                            android.util.Log.e("FileShare", "Notification error: ${notifEx.message}", notifEx)
+                        }
+
                         result.success(savedUri?.toString() ?: "saved")
                     } catch (e: Exception) {
+                        android.util.Log.e("FileShare", "Download failed: ${e.message}", e)
                         result.error("DOWNLOAD_FAILED", e.localizedMessage ?: "Could not save to Downloads", null)
+                    }
+                }
+                "openFile" -> {
+                    val filePath = call.argument<String>("filePath")
+                    if (filePath.isNullOrEmpty()) {
+                        result.error("INVALID_ARGS", "filePath is required", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        val file = java.io.File(filePath)
+                        if (!file.exists()) {
+                            result.error("FILE_NOT_FOUND", "File does not exist: $filePath", null)
+                            return@setMethodCallHandler
+                        }
+                        val mimeType = when {
+                            file.name.endsWith(".pdf", ignoreCase = true) -> "application/pdf"
+                            file.name.endsWith(".csv", ignoreCase = true) -> "text/csv"
+                            file.name.endsWith(".xlsx", ignoreCase = true) -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            file.name.endsWith(".xls", ignoreCase = true) -> "application/vnd.ms-excel"
+                            else -> "application/octet-stream"
+                        }
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            this,
+                            "${packageName}.fileprovider",
+                            file
+                        )
+                        val viewIntent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, mimeType)
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        val resList = packageManager.queryIntentActivities(viewIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                        for (resolveInfo in resList) {
+                            val pkg = resolveInfo.activityInfo.packageName
+                            grantUriPermission(pkg, uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        val chooser = android.content.Intent.createChooser(viewIntent, "Open ${file.name} with").apply {
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(chooser)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("FileShare", "openFile failed: ${e.message}", e)
+                        result.error("OPEN_FAILED", e.localizedMessage ?: "Could not open file", null)
                     }
                 }
                 else -> result.notImplemented()

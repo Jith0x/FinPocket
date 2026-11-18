@@ -4,15 +4,12 @@ import 'package:flutter/services.dart';
 /// Thin wrapper around the native `com.finpocket/share` MethodChannel.
 ///
 /// Opens WhatsApp directly with a file attached (no share-sheet detour),
-/// and saves a copy to the device Downloads folder.
+/// saves a copy to the device Downloads folder, and opens files with the system chooser.
 class FileShareService {
   static const MethodChannel _channel = MethodChannel('com.finpocket/share');
 
   /// Opens WhatsApp directly with [filePath] attached. When [phone] is a
   /// valid 10-digit Indian number, the app targets WhatsApp specifically.
-  ///
-  /// Returns true if the share intent was dispatched (WhatsApp opened, or
-  /// the system share sheet as fallback).
   static Future<bool> shareFileToWhatsApp({
     required String filePath,
     String? phone,
@@ -46,6 +43,23 @@ class FileShareService {
     } catch (e) {
       debugPrint('[FileShareService] download error: $e');
       return null;
+    }
+  }
+
+  /// Opens [filePath] using Android's system app chooser (PDF viewer for PDF,
+  /// Excel/Office spreadsheet viewer for CSV/Excel).
+  static Future<bool> openFile(String filePath) async {
+    try {
+      final result = await _channel.invokeMethod<bool>('openFile', {
+        'filePath': filePath,
+      });
+      return result ?? false;
+    } on PlatformException catch (e) {
+      debugPrint('[FileShareService] openFile failed: ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('[FileShareService] openFile error: $e');
+      return false;
     }
   }
 }

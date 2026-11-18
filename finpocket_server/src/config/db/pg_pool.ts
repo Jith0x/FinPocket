@@ -98,12 +98,8 @@ export function getPgPool(connectionString: string, key: PoolKey = 'app'): Pool 
     connectionString,
     max: Number(process.env.PG_POOL_MAX) || 10,
     idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS) || 30_000,
-    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 5_000,
+    connectionTimeoutMillis: Number(process.env.PG_CONNECT_TIMEOUT_MS) || 20_000,
     application_name: key === 'app' ? 'finpocket-api' : `finpocket-api-${key}`,
-    // SQLite stored ISO-8601 UTC strings; pin every session to UTC in the
-    // connection startup packet so strftime→to_char month buckets and every
-    // timestamp round-trip behave identically.
-    options: '-c TimeZone=UTC',
     ssl: resolveSslOptions(process.env),
   });
 
@@ -111,6 +107,12 @@ export function getPgPool(connectionString: string, key: PoolKey = 'app'): Pool 
   // down — pg would otherwise emit an unhandled 'error' event.
   p.on('error', (err) => {
     console.error(`[DB] Idle PostgreSQL client error (${key}):`, sanitizePgError(err));
+  });
+
+  p.on('connect', (client) => {
+    client.on('error', (err) => {
+      console.error(`[DB] PostgreSQL client error (${key}):`, sanitizePgError(err));
+    });
   });
 
   pools.set(key, p);

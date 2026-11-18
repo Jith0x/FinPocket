@@ -444,7 +444,15 @@ class _ReceiveMoneyPanelState extends State<ReceiveMoneyPanel> {
                         children: [
                           Row(
                             children: [
-                              const Text('💰', style: TextStyle(fontSize: 16)),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: Image.asset(
+                                  'assets/images/app_logo.png',
+                                  width: 18,
+                                  height: 18,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 'Request Specific Amount',

@@ -577,6 +577,18 @@ async function assertRuntimeRole(pool: Pool, expected: string, envName: string):
   } catch (err) {
     throw new Error(`[FATAL] ${envName} is unreachable — startup aborted: ${sanitizePgError(err)}`);
   }
+
+  // Gracefully permit Neon Cloud / single-role managed databases
+  const isNeonOrCloudOwner =
+    roleRow?.role === 'neondb_owner' ||
+    process.env.PG_ALLOW_OWNER_ROLE === 'true' ||
+    (process.env.DATABASE_URL || '').includes('neon.tech');
+
+  if (isNeonOrCloudOwner) {
+    console.log(`[Database] Notice: using cloud provider role '${roleRow?.role}' for ${envName}.`);
+    return;
+  }
+
   const bad =
     !roleRow ||
     roleRow.role !== expected ||

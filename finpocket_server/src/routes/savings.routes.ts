@@ -59,23 +59,12 @@ router.post('/goals/:id/add-funds', authMiddleware, async (req: AuthRequest, res
       primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE user_id = ? ORDER BY available_balance DESC LIMIT 1', [req.user!.id]);
     }
     if (!primaryAcc) {
-      const autoId = `bnk_${uuidv4().substring(0, 8)}`;
-      const startBal = Math.max(50000.0, amount * 2);
-      await runQuery(`
-        INSERT INTO bank_accounts (id, user_id, institution_name, institution_code, masked_account_number, account_type, current_balance, available_balance, is_primary, connection_status, provider_type, last_synced_at)
-        VALUES (?, ?, 'Primary Bank Account', 'AUTO', '•••• 4829', 'SAVINGS', ?, ?, 1, 'CONNECTED', 'SELF_DECLARED', ?)
-      `, [autoId, req.user!.id, startBal, startBal, new Date().toISOString()]);
-      primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE id = ?', [autoId]);
+      res.status(400).json({ error: 'No linked bank account found. Please connect your bank account first.' });
+      return;
     }
     if (primaryAcc.available_balance < amount) {
-      if (primaryAcc.provider_type === 'SELF_DECLARED' || primaryAcc.provider_type === 'MOCK') {
-        const topUp = Math.max(amount * 2, 25000.0);
-        await runQuery('UPDATE bank_accounts SET available_balance = available_balance + ?, current_balance = current_balance + ? WHERE id = ?', [topUp, topUp, primaryAcc.id]);
-        primaryAcc.available_balance += topUp;
-      } else {
-        res.status(400).json({ error: 'Insufficient bank balance to fund goal.' });
-        return;
-      }
+      res.status(400).json({ error: `Insufficient bank balance in ${primaryAcc.institution_name || 'linked bank'} (Available: ₹${primaryAcc.available_balance}).` });
+      return;
     }
 
     await runQuery('UPDATE bank_accounts SET available_balance = available_balance - ? WHERE id = ?', [amount, primaryAcc.id]);
@@ -117,28 +106,8 @@ router.post('/emergency-fund/deposit', authMiddleware, async (req: AuthRequest, 
       primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE user_id = ? ORDER BY available_balance DESC LIMIT 1', [req.user!.id]);
     }
     if (!primaryAcc) {
-      // Auto-provision a primary bank account so users who don't have AA credentials
-      // or who mirror from SMS are never blocked from building their Emergency Shield.
-      const name = bankName || (fundingSource === 'UPI' ? 'UPI Linked Account' : 'Primary Bank Account');
-      const startBal = Math.max(50000.0, amount * 2);
-      const autoId = `bnk_${uuidv4().substring(0, 8)}`;
-      await runQuery(`
-        INSERT INTO bank_accounts (id, user_id, institution_name, institution_code, masked_account_number, account_type, current_balance, available_balance, is_primary, connection_status, provider_type, last_synced_at)
-        VALUES (?, ?, ?, 'AUTO', '•••• 4829', 'SAVINGS', ?, ?, 1, 'CONNECTED', 'SELF_DECLARED', ?)
-      `, [autoId, req.user!.id, name, startBal, startBal, new Date().toISOString()]);
-
-      primaryAcc = await getQuery<any>('SELECT * FROM bank_accounts WHERE id = ?', [autoId]);
-    }
-
-    if (primaryAcc.available_balance < amount) {
-      if (primaryAcc.provider_type === 'SELF_DECLARED' || primaryAcc.provider_type === 'MOCK' || fundingSource === 'UPI') {
-        const topUp = Math.max(amount * 2, 25000.0);
-        await runQuery('UPDATE bank_accounts SET available_balance = available_balance + ?, current_balance = current_balance + ? WHERE id = ?', [topUp, topUp, primaryAcc.id]);
-        primaryAcc.available_balance += topUp;
-      } else {
-        res.status(400).json({ error: `Insufficient bank balance in ${primaryAcc.institution_name || 'linked bank'} (Available: ₹${primaryAcc.available_balance}).` });
-        return;
-      }
+      res.status(400).json({ error: 'No linked bank account found. Please connect your bank account first.' });
+      return;
     }
 
     const ef = await getQuery<any>('SELECT id FROM emergency_funds WHERE user_id = ?', [req.user!.id]);
@@ -147,7 +116,8 @@ router.post('/emergency-fund/deposit', authMiddleware, async (req: AuthRequest, 
       return;
     }
 
-    await runQuery('UPDATE bank_accounts SET available_balance = available_balance - ? WHERE id = ?', [amount, primaryAcc.id]);
+    const updatedBal = Math.max(0, (primaryAcc.available_balance || 0) - amount);
+    await runQuery('UPDATE bank_accounts SET available_balance = ?, current_balance = ? WHERE id = ?', [updatedBal, updatedBal, primaryAcc.id]);
     await runQuery('UPDATE emergency_funds SET current_amount = current_amount + ?, updated_at = ? WHERE id = ?', [amount, new Date().toISOString(), ef.id]);
 
     await runQuery(`

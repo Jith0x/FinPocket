@@ -27,7 +27,7 @@ export class SQLiteFinancialAccountRepository implements IFinancialAccountReposi
 
   async findByUserId(userId: string): Promise<FinancialAccountEntity[]> {
     const rows = await allQuery<any>(
-      'SELECT * FROM bank_accounts WHERE user_id = ? ORDER BY is_primary DESC, created_at ASC',
+      "SELECT * FROM bank_accounts WHERE user_id = ? AND connection_status = 'CONNECTED' AND masked_account_number NOT LIKE 'PENDING%' ORDER BY is_primary DESC, created_at ASC",
       [userId]
     );
     return rows.map(r => this.mapRow(r));
@@ -139,9 +139,13 @@ export class SQLiteTransactionRepository implements ITransactionRepository {
 
   async save(transaction: FinancialTransactionEntity): Promise<void> {
     await runQuery(`
-      INSERT OR REPLACE INTO transactions (
+      INSERT INTO transactions (
         id, user_id, account_id, amount, type, category_id, status, transaction_date, reference_id, description, merchant, sender, receiver
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET
+        amount = EXCLUDED.amount,
+        status = EXCLUDED.status,
+        description = EXCLUDED.description
     `, [
       transaction.id,
       transaction.userId,
@@ -218,9 +222,13 @@ export class SQLiteConsentRepository implements IConsentRepository {
 
   async save(consent: AccountConsentEntity): Promise<void> {
     await runQuery(`
-      INSERT OR REPLACE INTO account_consents (
+      INSERT INTO account_consents (
         id, user_id, bank_account_id, consent_handle, consent_status, data_access_types, valid_from, valid_to, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET
+        consent_status = EXCLUDED.consent_status,
+        consent_handle = EXCLUDED.consent_handle,
+        valid_to = EXCLUDED.valid_to
     `, [
       consent.id,
       consent.userId,

@@ -182,7 +182,7 @@ export class AccountsService {
 
   static async listAccounts(userId: string): Promise<BankAccountDTO[]> {
     const rows = await allQuery<any>(
-      'SELECT * FROM bank_accounts WHERE user_id = ?',
+      "SELECT * FROM bank_accounts WHERE user_id = ? AND connection_status = 'CONNECTED' AND masked_account_number NOT LIKE 'PENDING%'",
       [userId]
     );
 
@@ -211,7 +211,12 @@ export class AccountsService {
   }
 
   static async disconnectAccount(userId: string, accountId: string) {
-    return await this.provider.disconnectAccount(userId, accountId);
+    try {
+      await this.provider.disconnectAccount(userId, accountId);
+    } catch (_) {}
+    await runQuery('DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', [accountId, userId]);
+    await runQuery('DELETE FROM account_consents WHERE bank_account_id = ? AND user_id = ?', [accountId, userId]).catch(() => {});
+    return true;
   }
 
   static async createSelfDeclaredAccount(
@@ -219,18 +224,18 @@ export class AccountsService {
     params: {
       institutionName?: string;
       institutionCode?: string;
-      maskedAccountNumber?: string;
+      maskedAccountNumber: string;
       accountType?: string;
-      initialBalance?: number;
+      initialBalance: number;
     }
   ): Promise<BankAccountDTO> {
     const id = `bnk_${uuidv4().substring(0, 8)}`;
     const now = new Date().toISOString();
     const instName = params.institutionName || 'Primary Bank Account';
     const instCode = params.institutionCode || 'INSTANT';
-    const masked = params.maskedAccountNumber || '•••• 4829';
+    const masked = params.maskedAccountNumber;
     const accType = params.accountType || 'SAVINGS';
-    const bal = typeof params.initialBalance === 'number' && params.initialBalance >= 0 ? params.initialBalance : 50000.0;
+    const bal = typeof params.initialBalance === 'number' && !isNaN(params.initialBalance) && params.initialBalance >= 0 ? params.initialBalance : 0.0;
 
     const existingPrimary = await getQuery<{ id: string }>(
       'SELECT id FROM bank_accounts WHERE user_id = ? AND is_primary = 1 LIMIT 1',

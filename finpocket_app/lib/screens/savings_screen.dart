@@ -4,6 +4,7 @@ import '../providers/app_state.dart';
 import '../theme/app_theme.dart';
 import '../widgets/pin_dialog.dart';
 import '../widgets/create_goal_modal.dart';
+import '../widgets/connect_bank_modal.dart';
 
 class SavingsScreen extends StatelessWidget {
   const SavingsScreen({super.key});
@@ -17,10 +18,10 @@ class SavingsScreen extends StatelessWidget {
   }
 
   void _showDepositDialog(BuildContext context, AppState state) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final controller = TextEditingController();
     final primaryAcc = state.bankAccounts.isNotEmpty ? state.bankAccounts.first : null;
     final availableBank = primaryAcc?.availableBalance ?? state.totalAvailableBalance;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showModalBottomSheet(
       context: context,
@@ -71,33 +72,64 @@ class SavingsScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 6),
-              // Source Bank Info
+              // Source Funding Info
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withOpacity(0.08),
+                  color: primaryAcc != null
+                      ? AppTheme.primary.withOpacity(0.08)
+                      : const Color(0xFF10B981).withOpacity(0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+                  border: Border.all(
+                    color: primaryAcc != null
+                        ? AppTheme.primary.withOpacity(0.2)
+                        : const Color(0xFF10B981).withOpacity(0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.account_balance, color: AppTheme.primary, size: 18),
-                    const SizedBox(width: 8),
+                    Icon(
+                      primaryAcc != null ? Icons.account_balance : Icons.flash_on_rounded,
+                      color: primaryAcc != null ? AppTheme.primary : const Color(0xFF10B981),
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            primaryAcc?.bankName ?? 'Primary Bank Account',
+                            primaryAcc?.bankName ?? 'Instant UPI Transfer / Smart Reserve',
                             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                           ),
                           Text(
-                            'Available to transfer: ₹${availableBank.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w600),
+                            primaryAcc != null
+                                ? 'Available in bank: ₹${availableBank.toStringAsFixed(0)}'
+                                : 'Direct funding · No netbanking login needed',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: primaryAcc != null ? AppTheme.primary : const Color(0xFF10B981),
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    if (primaryAcc == null)
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(builder: (_) => const ConnectBankModal()),
+                          );
+                        },
+                        child: const Text('Link Bank', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                      ),
                   ],
                 ),
               ),
@@ -163,7 +195,7 @@ class SavingsScreen extends StatelessWidget {
                       );
                       return;
                     }
-                    if (amt > availableBank) {
+                    if (primaryAcc != null && amt > availableBank) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
                           content: Text('Insufficient funds in bank account (₹${availableBank.toStringAsFixed(0)} available).'),
@@ -174,7 +206,11 @@ class SavingsScreen extends StatelessWidget {
                     }
 
                     Navigator.pop(ctx);
-                    final res = await state.depositEmergencyFund(amt, overlayContext: context);
+                    final res = await state.depositEmergencyFund(
+                      amt,
+                      fundingSource: primaryAcc != null ? 'BANK_ACCOUNT' : 'UPI',
+                      overlayContext: context,
+                    );
                     if (context.mounted) {
                       if (res['success'] == true) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -208,10 +244,24 @@ class SavingsScreen extends StatelessWidget {
                           ),
                         );
                       } else {
+                        final isNoBank = (res['message']?.toString() ?? '').toLowerCase().contains('bank account');
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             backgroundColor: Colors.red,
                             content: Text(res['message']?.toString() ?? 'Transfer failed.'),
+                            action: isNoBank
+                                ? SnackBarAction(
+                                    label: 'Link Bank',
+                                    textColor: Colors.white,
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) => const ConnectBankModal(),
+                                        ),
+                                      );
+                                    },
+                                  )
+                                : null,
                           ),
                         );
                       }
@@ -409,7 +459,8 @@ class SavingsScreen extends StatelessWidget {
                     context: context,
                     builder: (pinCtx) => PinDialog(
                       title: 'Authorize Emergency Withdrawal',
-                      subtitle: 'Enter PIN to confirm withdrawal of ₹${amt.toStringAsFixed(0)}',
+                      subtitle: 'Enter Shield Password (min 6 digits) to confirm withdrawal of ₹${amt.toStringAsFixed(0)}',
+                      minLength: 6,
                       onValidate: (pin) async {
                         final ok = await state.verifyAppPin(pin);
                         if (ok) validatedPin = pin;
@@ -458,7 +509,8 @@ class SavingsScreen extends StatelessWidget {
         context: context,
         builder: (ctx) => PinDialog(
           title: 'Unlock Emergency Fund',
-          subtitle: 'Enter PIN to unlock fund',
+          subtitle: 'Enter Shield Password (min 6 digits) to unlock fund',
+          minLength: 6,
           onValidate: state.verifyAppPin,
           onSuccess: () => state.toggleLockEmergencyFund(false),
         ),
@@ -923,6 +975,27 @@ class SavingsScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: isDark ? const Color(0xFF14B8A6) : AppTheme.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                      ),
+                      icon: const Icon(Icons.password_rounded, size: 16),
+                      label: const Text(
+                        'Set / Change Shield Password (min 6 digits)',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                      onPressed: () {
+                        showDialog(
+                          context: context,
+                          builder: (_) => const SetPinDialog(),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- App documents directory where statements are saved -->
+    <!-- Allow access to device root, app data, files, and cache -->
+    <root-path name="root" path="." />
     <files-path name="documents" path="." />
+    <files-path name="app_flutter" path="../app_flutter" />
     <cache-path name="cache" path="." />
     <external-files-path name="external_files" path="." />
     <external-path name="external" path="." />
+    <external-cache-path name="external_cache" path="." />
 </paths>
+

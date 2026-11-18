@@ -60,3 +60,12 @@ build/
 
 # Root-level compiled artifacts
 /lib/
+.neon
+
+# App Binaries & Screenshots
+*.apk
+*.aab
+device_screen.png
+playstore_*.png
+*google-services.json
+google-services.json

@@ -107,49 +107,15 @@ class SubscriptionRadarService {
     // Purge any legacy mock/hardcoded subscriptions
     subs.removeWhere((s) => s.id.startsWith('sub_'));
 
-    // Scan real transactions for recurring debits if provided
-    if (transactions != null && transactions.isNotEmpty) {
-      final merchantCounts = <String, List<Transaction>>{};
-      for (final tx in transactions) {
-        if (tx.amount > 0) {
-          final title = tx.merchant ?? (tx.receiver.isNotEmpty ? tx.receiver : tx.description);
-          final key = title.trim().toLowerCase();
-          merchantCounts.putIfAbsent(key, () => []).add(tx);
-        }
-      }
-      for (final entry in merchantCounts.entries) {
-        if (entry.value.length >= 2) {
-          final first = entry.value.first;
-          final title = first.merchant ?? (first.receiver.isNotEmpty ? first.receiver : first.description);
-          final alreadyPresent = subs.any((s) => s.name.toLowerCase() == title.toLowerCase());
-          if (!alreadyPresent) {
-            subs.add(GhostSubscription(
-              id: 'detected_${title.hashCode.abs()}',
-              name: title,
-              amount: first.amount,
-              cadenceDays: 30,
-              lastDebitedDate: first.date,
-              nextEstimatedDate: first.date.add(const Duration(days: 30)),
-              category: first.category.name,
-              isAutoDebitMandate: true,
-              logoEmoji: '🔁',
-              note: 'Auto-detected from recurring transactions',
-            ));
-          }
-        }
-      }
-    }
+    // Purge stored ghost subscriptions that were erroneously auto-created from repeating transactions
+    try {
+      await prefs.remove(_storageKey);
+    } catch (_) {}
 
-    await saveSubscriptions(subs);
+    // Auto-Debit Radar notifications removed per user request
+    SystemNotificationService().cancelAllNotifications();
 
-    // Cancel old mock notifications if no real subscriptions exist
-    if (subs.isEmpty) {
-      SystemNotificationService().cancelAllNotifications();
-    } else {
-      checkAndSend48HourAlerts(subs);
-    }
-
-    return subs;
+    return [];
   }
 
   /// Save detected subscriptions locally
@@ -176,23 +142,10 @@ class SubscriptionRadarService {
     return current;
   }
 
-  /// Proactively trigger notifications if any subscription is due within 48 hours
+  /// Proactively trigger notifications if any subscription is due within 48 hours (Disabled per user request)
   static void checkAndSend48HourAlerts(List<GhostSubscription> subs) {
-    for (final sub in subs) {
-      if (sub.isDueWithin48Hours) {
-        final hours = sub.hoursUntilDue;
-        final timeDesc = hours <= 0 ? 'today' : 'in ~$hours hours';
-        SystemNotificationService().postNotification(
-          AppNotification(
-            id: 'sub_radar_${sub.id}_${DateTime.now().millisecondsSinceEpoch}',
-            title: '⚠️ Auto-Debit Radar: ${sub.name}',
-            message: '₹${sub.amount.toStringAsFixed(0)} is scheduled to auto-debit $timeDesc. Ensure your bank account has funds to prevent mandate bounce charges.',
-            type: NotificationType.budgetAlert,
-            timestamp: DateTime.now(),
-          ),
-        );
-      }
-    }
+    // Auto-Debit Radar notifications completely disabled
+    return;
   }
 
   /// Compute total annual cost drain across all recurring subscriptions

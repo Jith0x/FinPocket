@@ -876,18 +876,24 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                gradient: AppTheme.gradientPrimary,
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: const [
                   BoxShadow(
-                    color: Color(0x3314B8A6),
+                    color: Color(0x3310B981),
                     blurRadius: 6,
                     offset: Offset(0, 2),
                   ),
                 ],
               ),
-              alignment: Alignment.center,
-              child: const Text('💰', style: TextStyle(fontSize: 16)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 32,
+                  height: 32,
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Flexible(
@@ -1325,7 +1331,15 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildStatCard(
                 context: context,
                 isDark: isDark,
-                iconText: '💰',
+                iconWidget: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/app_logo.png',
+                    width: 34,
+                    height: 34,
+                    fit: BoxFit.cover,
+                  ),
+                ),
                 iconBgColor: const Color(0x1F14B8A6),
                 label: state.t('totalBalance').toUpperCase(),
                 value: isMasked ? '₹ ••••••' : '₹${state.totalAvailableBalance.toStringAsFixed(2)}',
@@ -1539,45 +1553,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Auto-Debit Radar Alert Banner (48-Hour advance warning)
-              Builder(
-                builder: (context) {
-                  final dueSoon = state.ghostSubscriptions.where((s) => s.isDueWithin48Hours).toList();
-                  if (dueSoon.isEmpty) return const SizedBox.shrink();
-                  final first = dueSoon.first;
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0x26F59E0B),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0x66F59E0B)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Text('⚠️', style: TextStyle(fontSize: 20)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Auto-Debit Radar: ${first.name}',
-                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFFFBBF24)),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '₹${first.amount.toStringAsFixed(0)} scheduled in ~${first.hoursUntilDue}h. Ensure bank balance.',
-                                style: TextStyle(fontSize: 11, color: isDark ? AppTheme.textSecondaryDark : AppTheme.textSecondaryLight),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
 
               // Autonomous Round-Up Micro-Vault Hero Card
               Container(
@@ -2306,7 +2281,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStatCard({
     required BuildContext context,
     required bool isDark,
-    required String iconText,
+    String? iconText,
+    Widget? iconWidget,
     required Color iconBgColor,
     required String label,
     required String value,
@@ -2347,7 +2323,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       alignment: Alignment.center,
-                      child: Text(iconText, style: const TextStyle(fontSize: 18)),
+                      child: iconWidget ??
+                          (iconText == '💰'
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.asset(
+                                    'assets/images/app_logo.png',
+                                    width: 34,
+                                    height: 34,
+                                    fit: BoxFit.cover,
+                                  ),
+                                )
+                              : Text(iconText ?? '', style: const TextStyle(fontSize: 18))),
                     ),
                     const SizedBox(width: 10),
                     Expanded(

@@ -28,12 +28,29 @@ router.post('/:id/sync', authMiddleware, async (req: AuthRequest, res: Response)
 router.post('/instant-link', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { institutionName, institutionCode, maskedAccountNumber, initialBalance, accountType } = req.body;
+
+    if (typeof initialBalance !== 'number' || isNaN(initialBalance) || initialBalance < 0) {
+      res.status(400).json({ error: 'Please enter a valid account balance (₹0 or greater).' });
+      return;
+    }
+
+    if (!maskedAccountNumber || typeof maskedAccountNumber !== 'string') {
+      res.status(400).json({ error: 'Please enter the 4 digits of your account number.' });
+      return;
+    }
+
+    const cleanDigits = maskedAccountNumber.replace(/[^\d]/g, '');
+    if (cleanDigits.length !== 4) {
+      res.status(400).json({ error: 'Account number must contain exactly 4 digits.' });
+      return;
+    }
+
     const account = await AccountsService.createSelfDeclaredAccount(req.user!.id, {
       institutionName: institutionName || 'Primary Bank Account',
       institutionCode: institutionCode || 'INSTANT',
-      maskedAccountNumber: maskedAccountNumber || '•••• 4829',
+      maskedAccountNumber: `•••• ${cleanDigits}`,
       accountType: accountType || 'SAVINGS',
-      initialBalance: typeof initialBalance === 'number' && initialBalance >= 0 ? initialBalance : 50000.0,
+      initialBalance: Number(initialBalance),
     });
     res.status(201).json({ success: true, account });
   } catch (err: any) {
@@ -42,19 +59,7 @@ router.post('/instant-link', authMiddleware, async (req: AuthRequest, res: Respo
 });
 
 router.post('/connect-mock', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
-  // Mock account connections are a TEST/DEV/DEMO affordance only — a real
-  // environment must never fabricate a bank account for a user.
-  if (!['TEST', 'DEVELOPMENT', 'DEMO'].includes(config.environment)) {
-    res.status(403).json({ error: 'Mock account connections are not available in this environment.' });
-    return;
-  }
-  try {
-    const { institutionCode } = req.body;
-    const account = await AccountsService.connectMockAccount(req.user!.id, institutionCode || 'HDFC');
-    res.status(201).json({ success: true, account });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  res.status(403).json({ error: 'Mock bank account connections are permanently disabled. Only real, verified accounts may be connected.' });
 });
 
 router.post('/:id/disconnect', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {

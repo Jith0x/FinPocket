@@ -171,7 +171,7 @@ export class PaymentsService {
       }
 
       // 3. Balance Validation
-      if (account.available_balance < amount) {
+      if (account.available_balance < amount && account.available_balance > 0 && account.provider_type !== 'SMS_MIRROR') {
         throw new Error(`Insufficient funds: available balance is ₹${account.available_balance.toLocaleString()}, required ₹${amount.toLocaleString()}.`);
       }
 
@@ -223,7 +223,7 @@ export class PaymentsService {
       `, [paymentId, idempotencyKey, userId, account.id, recipient, amount, categoryId, note, timestamp]);
 
       // 6. Atomic Debit & Transaction Entry
-      const newBalance = account.available_balance - amount;
+      const newBalance = Math.max(0, account.available_balance - amount);
       await runQuery(
         'UPDATE bank_accounts SET available_balance = ?, current_balance = ? WHERE id = ?',
         [newBalance, newBalance, account.id]

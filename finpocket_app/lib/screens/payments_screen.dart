@@ -2971,126 +2971,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
             ),
             const SizedBox(height: 20),
 
-            // Payment Status Center
-            if (state.pendingPayments.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isDark ? AppTheme.bgCardDark : AppTheme.bgCardLight,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: isDark ? AppTheme.borderDark : AppTheme.borderLight,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              const Text('⏱️', style: TextStyle(fontSize: 16)),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(
-                                  'Payment Status Center',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Authoritative State',
-                          style: TextStyle(fontSize: 11, color: isDark ? AppTheme.textMutedDark : AppTheme.textSecondaryLight),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ...state.pendingPayments.map((p) {
-                      final isProcessing = p.state == 'PROCESSING';
-                      final isPending = p.state == 'PENDING';
-                      final Color badgeColor = isProcessing
-                          ? const Color(0xFF38BDF8)
-                          : isPending
-                              ? const Color(0xFFFBBF24)
-                              : const Color(0xFF34D399);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark ? AppTheme.bgCardDarkHover : AppTheme.bgCardLightSoft,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    p.recipient,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    p.createdAt,
-                                    style: TextStyle(fontSize: 11, color: isDark ? AppTheme.textSecondaryDark : AppTheme.textSecondaryLight),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '₹${p.amount.toStringAsFixed(0)}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: badgeColor.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    p.state,
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
 
             // Financial Accounts & Account Aggregator Linking
             Row(
@@ -3133,11 +3013,45 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
                   ),
                   icon: const Icon(Icons.add_link, size: 16, color: AppTheme.primaryLight),
                   label: const Text('Connect', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.primaryLight)),
-                  onPressed: () => _showAccountLinkingModal(context),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const ConnectBankModal(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
             const SizedBox(height: 8),
+
+            if (state.bankAccounts.isEmpty)
+              Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark ? AppTheme.bgCardDark : AppTheme.bgCardLight,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? AppTheme.borderDark : AppTheme.borderLight,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.account_balance_outlined, size: 22, color: AppTheme.primaryLight),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'No bank accounts connected yet. Tap "Connect" to mirror your verified bank SMS.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? AppTheme.textSecondaryDark : AppTheme.textSecondaryLight,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             ...state.bankAccounts.map((bank) {
               final isDemo = state.isDemoMode && bank.isDemo;
@@ -3252,13 +3166,52 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
                         ],
                       ),
                     ),
-                    Text(
-                      state.isChildCareActive ? '••••••' : '₹${bank.availableBalance.toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          state.isChildCareActive ? '••••••' : '₹${bank.availableBalance.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () async {
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: const Text('Disconnect Bank'),
+                                content: Text('Do you want to unlink ${bank.bankName} (${bank.maskedAccountNumber})?'),
+                                actions: [
+                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                                  TextButton(
+                                    style: TextButton.styleFrom(foregroundColor: AppTheme.danger),
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Unlink'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await state.disconnectAccount(bank.id);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('${bank.bankName} unlinked.')),
+                                );
+                              }
+                            }
+                          },
+                          child: const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Text(
+                              'Unlink',
+                              style: TextStyle(fontSize: 11, color: AppTheme.danger, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -3270,92 +3223,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> with WidgetsBindingObse
     );
   }
 
-  void _showAccountLinkingModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.shield_outlined, color: AppTheme.primaryLight, size: 20),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'CONNECT BANK ACCOUNT',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warning.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text('CONSENT REQUIRED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.warning)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'FinPocket uses consent-based ReBIT Account Aggregator architecture for financial data access in Sandbox/Staging mode.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('• Purpose: Financial Planning & Safe-to-Spend calculation', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
-                  SizedBox(height: 4),
-                  Text('• Data Scope: Read-only Balances & Transactions (No Money Movement)', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
-                  SizedBox(height: 4),
-                  Text('• Validity: 365 Days (Revocable at any time)', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
-                  SizedBox(height: 4),
-                  Text('• Security: End-to-end encrypted; banking passwords never collected', style: TextStyle(fontSize: 11, color: Color(0xFFCBD5E1))),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  // Real flow: registered mobile → AA consent (when the server
-                  // has an aggregator) or the on-device SMS importer.
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const ConnectBankModal(),
-                    ),
-                  );
-                },
-                child: const Text('Request AA Consent', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _affordRow(String label, String value, {bool isDark = true}) {
     return Padding(

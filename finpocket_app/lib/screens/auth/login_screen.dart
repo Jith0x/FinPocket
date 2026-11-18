@@ -9,6 +9,7 @@ import '../../core/storage/secure_token_storage.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../widgets/auth/captcha_widget.dart';
+import '../../widgets/common/brand_logo.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -420,41 +421,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _showServerConfigDialog,
                     ),
                   ),
-                  // Web-aligned Logo & Header (Matches Web login.html .auth-logo)
-                  Center(
-                    child: Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.gradientPrimary,
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x3314B8A6),
-                            blurRadius: 16,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('💰', style: TextStyle(fontSize: 28)),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-
-                  // Brand & Welcome
-                  Center(
-                    child: ShaderMask(
-                      shaderCallback: (bounds) => AppTheme.gradientPrimary.createShader(bounds),
-                      child: const Text(
-                        'FinPocket',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
+                  // Unified FinPocket Brand Logo & Title
+                  const Center(
+                    child: FinPocketLogo(
+                      size: 58,
+                      showText: true,
                     ),
                   ),
                   const SizedBox(height: 6),

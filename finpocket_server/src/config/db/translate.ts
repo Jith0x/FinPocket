@@ -247,8 +247,7 @@ export function translateToPostgres(sql: string): string {
 
   if (/\bINSERT\s+OR\s+REPLACE\b/i.test(before)) {
     throw new SqlDialectError(
-      'INSERT OR REPLACE is SQLite-only. PostgreSQL repositories must use INSERT … ON CONFLICT ' +
-        '(see repositories/postgres_repositories.ts) — refusing to guess a conflict target.'
+      'Unsupported SQL dialect construct for current database engine: INSERT OR REPLACE.'
     );
   }
   if (/\bPRAGMA\b/i.test(before)) {

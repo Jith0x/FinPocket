@@ -143,6 +143,7 @@ app.use('/api', dbScopeMiddleware);
 
 // 5. Observability & Health Routes
 app.use('/health', healthRoutes);
+app.use('/api/v1/health', healthRoutes);
 
 // 6. Mount Feature Routes
 app.use('/api/v1/auth', authRoutes);
