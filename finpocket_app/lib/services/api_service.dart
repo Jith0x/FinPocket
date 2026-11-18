@@ -54,12 +54,19 @@ class ApiService {
     return headers;
   }
 
-  /// Low-level authenticated request handler with automatic 401 refresh token interceptor
+  /// Low-level authenticated request handler with automatic 401 refresh token interceptor and network failover
   static Future<http.Response> _sendWithAuth(
     Future<http.Response> Function(Map<String, String> headers) requestFn,
   ) async {
     final initialHeaders = _headers();
-    var response = await requestFn(initialHeaders);
+    http.Response response;
+    try {
+      response = await requestFn(initialHeaders);
+    } catch (_) {
+      // If primary connection drops or times out, rediscover active host and retry once
+      await discoverHost();
+      response = await requestFn(_headers());
+    }
 
     if (response.statusCode == 401 && TokenManager.refreshToken != null) {
       final refreshSuccess = await TokenManager.refreshTokenSafe();
@@ -73,7 +80,6 @@ class ApiService {
     return response;
   }
 
-
   // ==========================================
   // HOST DISCOVERY & AUTHENTICATION APIS
   // ==========================================
@@ -81,14 +87,17 @@ class ApiService {
   static List<String> get _candidateHosts {
     if (kIsWeb) {
       return [
-        'https://finpocket-52hh.onrender.com/api/v1',
         'http://localhost:3001/api/v1',
+        'http://127.0.0.1:3001/api/v1',
+        'http://192.168.1.9:3001/api/v1',
+        'https://finpocket-52hh.onrender.com/api/v1',
       ];
     }
     return [
-      'https://finpocket-52hh.onrender.com/api/v1',
       'http://127.0.0.1:3001/api/v1',
       'http://localhost:3001/api/v1',
+      'http://192.168.1.9:3001/api/v1',
+      'https://finpocket-52hh.onrender.com/api/v1',
       'http://10.0.2.2:3001/api/v1',
     ];
   }
@@ -99,17 +108,40 @@ class ApiService {
       return AppConfig.apiBaseUrl;
     }
     if (AppConfig.apiHostOverride.isNotEmpty) return AppConfig.apiBaseUrl;
-    if (AppConfig.customApiBaseUrl != null && AppConfig.customApiBaseUrl!.isNotEmpty) {
-      return AppConfig.customApiBaseUrl!;
+
+    // Check currently cached customApiBaseUrl first
+    final currentCustom = AppConfig.customApiBaseUrl;
+    if (currentCustom != null && currentCustom.isNotEmpty) {
+      try {
+        final res = await http.get(Uri.parse('$currentCustom/health')).timeout(const Duration(seconds: 3));
+        if (res.statusCode == 200) return currentCustom;
+      } catch (_) {}
     }
 
     final saved = await SecureTokenStorage.getCustomApiUrl();
     if (saved != null && saved.isNotEmpty) {
-      AppConfig.customApiBaseUrl = saved;
-      return saved;
+      try {
+        final res = await http.get(Uri.parse('$saved/health')).timeout(const Duration(seconds: 3));
+        if (res.statusCode == 200) {
+          AppConfig.customApiBaseUrl = saved;
+          return saved;
+        }
+      } catch (_) {}
     }
 
-    // Default to the live verified HTTPS backend
+    // Probe candidate hosts in order of priority (local USB/LAN first, then cloud)
+    for (final host in _candidateHosts) {
+      try {
+        final timeoutSec = host.startsWith('https://') ? 5 : 2;
+        final res = await http.get(Uri.parse('$host/health')).timeout(Duration(seconds: timeoutSec));
+        if (res.statusCode == 200) {
+          AppConfig.customApiBaseUrl = host;
+          await SecureTokenStorage.saveCustomApiUrl(host);
+          return host;
+        }
+      } catch (_) {}
+    }
+
     AppConfig.customApiBaseUrl = AppConfig.apiBaseUrl;
     return AppConfig.apiBaseUrl;
   }
@@ -122,39 +154,59 @@ class ApiService {
     final payload = jsonEncode(body);
     final reqHeaders = headers ?? _headers();
 
-    // The configured backend ALWAYS leads.
-    final explicitlyConfigured = AppConfig.isProduction ||
-        AppConfig.isStaging ||
-        AppConfig.environment == AppEnvironment.test ||
-        AppConfig.apiHostOverride.isNotEmpty ||
-        (AppConfig.customApiBaseUrl?.isNotEmpty ?? false) ||
-        baseUrl.startsWith('https://');
-
-    if (explicitlyConfigured) {
+    // Strict production uses configured URL with ample timeout
+    if (AppConfig.isProduction) {
       return await http
           .post(
             Uri.parse('$baseUrl$endpoint'),
             headers: reqHeaders,
             body: payload,
           )
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 35));
     }
 
-    // Unconfigured dev builds: probe the candidates (tunnel/cloud first, then local loopback)
-    Object? lastError;
-    for (final host in _candidateHosts) {
+    // Try current target baseUrl first
+    final primaryTarget = baseUrl.isNotEmpty ? baseUrl : null;
+    if (primaryTarget != null) {
       try {
+        final timeoutSec = primaryTarget.startsWith('https://') ? 8 : 4;
         final res = await http
-          .post(
-            Uri.parse('$host$endpoint'),
-            headers: reqHeaders,
-            body: payload,
-          )
-          .timeout(const Duration(seconds: 8));
+            .post(
+              Uri.parse('$primaryTarget$endpoint'),
+              headers: reqHeaders,
+              body: payload,
+            )
+            .timeout(Duration(seconds: timeoutSec));
+        if (res.statusCode < 500) {
+          return res;
+        }
+      } catch (_) {
+        // Fall through to probe candidate hosts
+      }
+    }
 
-        AppConfig.customApiBaseUrl = host;
-        await SecureTokenStorage.saveCustomApiUrl(host);
-        return res;
+    // Probe candidate hosts for a live backend (USB adb reverse, Wi-Fi LAN, cloud)
+    Object? lastError;
+    final hostsToProbe = <String>[
+      for (final h in _candidateHosts) if (h != primaryTarget) h,
+    ];
+
+    for (final host in hostsToProbe) {
+      try {
+        final timeoutSec = host.startsWith('https://') ? 25 : 3;
+        final res = await http
+            .post(
+              Uri.parse('$host$endpoint'),
+              headers: reqHeaders,
+              body: payload,
+            )
+            .timeout(Duration(seconds: timeoutSec));
+
+        if (res.statusCode < 500) {
+          AppConfig.customApiBaseUrl = host;
+          await SecureTokenStorage.saveCustomApiUrl(host);
+          return res;
+        }
       } catch (e) {
         lastError = e;
       }

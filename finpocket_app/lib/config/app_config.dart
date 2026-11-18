@@ -93,7 +93,7 @@ class AppConfig {
       }
     }
 
-    // 3. Environment defaults: Live verified cloud endpoint with SSL (Render 24/7 backend)
+    // 3. Environment defaults:
     switch (environment) {
       case AppEnvironment.production:
       case AppEnvironment.staging:
@@ -101,7 +101,7 @@ class AppConfig {
       case AppEnvironment.development:
       case AppEnvironment.demo:
       case AppEnvironment.test:
-        return 'https://finpocket-52hh.onrender.com/api/v1';
+        return 'http://127.0.0.1:3001/api/v1';
     }
   }
 
