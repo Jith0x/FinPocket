@@ -707,24 +707,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
     return await _openPhoneOtpSheet(initialCooldown: cooldown);
   }
-      initialCooldownSeconds: cooldown,
-    );
-
-    if (verified == true && mounted) {
-      setState(() {
-        _isPhoneVerified = true;
-        _localError = null;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Mobile phone number verified successfully!'),
-          backgroundColor: AppTheme.success,
-        ),
-      );
-      return true;
-    }
-    return false;
-  }
 
   Color _getStrengthColor(int score) {
     switch (score) {
