@@ -109,26 +109,36 @@ class _SpendGuardSheetState extends State<SpendGuardSheet> {
         color: isDark ? AppTheme.bgSurfaceDark : AppTheme.bgSurfaceLight,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.security, color: AppTheme.primary, size: 22),
-                  SizedBox(width: 8),
-                  Text('Spend Guard Affordability', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.close, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ],
-          ),
+      child: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.security, color: AppTheme.primary, size: 22),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Spend Guard Affordability',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
           const SizedBox(height: 6),
           Text(
             'Check real-time impact on your Safe-to-Spend runway before you pay.',
@@ -226,6 +236,7 @@ class _SpendGuardSheetState extends State<SpendGuardSheet> {
             child: const Text('Confirm & Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
       ),
     );
   }

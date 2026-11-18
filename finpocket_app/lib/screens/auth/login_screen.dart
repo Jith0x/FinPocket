@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../../providers/app_state.dart';
 import '../../theme/app_theme.dart';
@@ -413,19 +414,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: IconButton(
-                      icon: const Icon(Icons.settings_ethernet_rounded, size: 20, color: Color(0xFF64748B)),
-                      tooltip: 'Server Connection Settings',
-                      onPressed: _showServerConfigDialog,
-                    ),
-                  ),
-                  // Unified FinPocket Brand Logo & Title
-                  const Center(
-                    child: FinPocketLogo(
-                      size: 58,
-                      showText: true,
+                  // Unified FinPocket Brand Logo & Title (Long-press in debug mode opens server config)
+                  Center(
+                    child: GestureDetector(
+                      onLongPress: () {
+                        if (kDebugMode) {
+                          _showServerConfigDialog();
+                        }
+                      },
+                      child: const FinPocketLogo(
+                        size: 58,
+                        showText: true,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 6),

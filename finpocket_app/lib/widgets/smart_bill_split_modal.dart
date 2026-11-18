@@ -356,26 +356,30 @@ $paySection''';
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'How Many Friends / Members?',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'How Many Friends / Members?',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDark ? AppTheme.textPrimaryDark : AppTheme.textPrimaryLight,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Split equally including you',
-                                  style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
-                                ),
-                              ],
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Split equally including you',
+                                    style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             // Stepper (- / +)
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   style: IconButton.styleFrom(
@@ -388,7 +392,7 @@ $paySection''';
                                       : null,
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10),
                                   child: Text(
                                     '$_membersCount',
                                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppTheme.primary),
@@ -413,6 +417,7 @@ $paySection''';
                         // Quick presets chips: [2] [3] [4] [5] [6] [8] [10]
                         Wrap(
                           spacing: 8,
+                          runSpacing: 8,
                           children: [2, 3, 4, 5, 6, 8, 10].map((n) {
                             final isSel = _membersCount == n;
                             return ChoiceChip(
