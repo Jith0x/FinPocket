@@ -141,6 +141,17 @@ app.use('/api/v1/aa/callback', systemDbScopeMiddleware);
 app.use('/api/v1/setu/redirect', systemDbScopeMiddleware);
 app.use('/api', dbScopeMiddleware);
 
+// Root welcome endpoint for browsers and uptime monitors
+app.get(['/', '/api/v1'], (_req, res) => {
+  res.json({
+    name: 'FinPocket Backend API',
+    status: 'online',
+    version: '1.0.0',
+    health: '/api/v1/health',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // 5. Observability & Health Routes
 app.use('/health', healthRoutes);
 app.use('/api/v1/health', healthRoutes);
