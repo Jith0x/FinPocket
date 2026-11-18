@@ -39,7 +39,7 @@ const isTestRun = entryPoint.includes(`${path.sep}tests${path.sep}`);
 export const resolvedEngine: ResolvedDbEngine = isTestRun
   ? { engine: 'sqlite', reason: 'test entry point: isolated SQLite fixture DB (finpocket.test.sqlite)' }
   : resolveDbEngine();
-export const engine: DbEngine = resolvedEngine.engine;
+export let engine: DbEngine = resolvedEngine.engine;
 
 // Tests must never share the development database. Every `npm test` run used to
 // `initDatabase()` against data/finpocket.sqlite and leave behind fixture users,
@@ -62,7 +62,7 @@ if (isTestRun && engine !== 'sqlite') {
   );
 }
 
-if (engine === 'sqlite' && !fs.existsSync(path.dirname(dbPath))) {
+if (!fs.existsSync(path.dirname(dbPath))) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 }
 
@@ -70,9 +70,7 @@ if (isTestRun) {
   console.log(`[Database] Test run -> ${dbPath} (development data untouched)`);
 }
 
-// In PostgreSQL mode there is no SQLite handle; tests never run in that mode,
-// so the exported `db` is only ever dereferenced with a live handle.
-export const db = (engine === 'sqlite' ? new sqlite3.Database(dbPath) : null) as unknown as sqlite3.Database;
+export let db: sqlite3.Database = new sqlite3.Database(dbPath);
 
 export function execQuery(sql: string): Promise<void> {
   if (engine === 'postgres') return pgExecQuery(sql);
@@ -174,8 +172,14 @@ export async function withTransaction<T>(operation: () => Promise<T>): Promise<T
 
 export async function initDatabase() {
   if (engine === 'postgres') {
-    await initPostgresDatabase();
-    return;
+    try {
+      await initPostgresDatabase();
+      return;
+    } catch (pgErr) {
+      console.warn('[Database] PostgreSQL connection failed or timed out:', pgErr instanceof Error ? pgErr.message : pgErr);
+      console.warn('[Database] Gracefully falling back to SQLite to prevent crash-loops and keep server online.');
+      engine = 'sqlite';
+    }
   }
 
   // 1. Enforce Foreign Keys
