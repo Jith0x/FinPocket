@@ -34,11 +34,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   // Phone Verification & Privacy State
   bool _isPhoneVerified = false;
   bool _isSendingOtp = false;
+  bool _hasPhoneOtpSent = false;
 
   // Real-time Email Verification State
   bool _isEmailValid = false;
   bool _isEmailVerified = false;
   bool _isSendingEmailOtp = false;
+  bool _hasEmailOtpSent = false;
   String? _emailValidationNotice;
 
   @override
@@ -55,18 +57,20 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _onPhoneChanged() {
-    if (_isPhoneVerified) {
+    if (_isPhoneVerified || _hasPhoneOtpSent) {
       setState(() {
         _isPhoneVerified = false;
+        _hasPhoneOtpSent = false;
       });
     }
   }
 
   void _onEmailChanged() {
     final email = _emailController.text.trim();
-    if (_isEmailVerified) {
+    if (_isEmailVerified || _hasEmailOtpSent) {
       setState(() {
         _isEmailVerified = false;
+        _hasEmailOtpSent = false;
       });
     }
     if (email.isEmpty) {
@@ -555,7 +559,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
 
-  Future<bool> _showEmailOtpModal() async {
+  Future<bool> _openEmailOtpSheet({int initialCooldown = 30}) async {
+    final email = _emailController.text.trim();
+    final verified = await OtpVerificationSheet.show(
+      context: context,
+      type: OtpVerificationType.email,
+      destination: email,
+      initialCooldownSeconds: initialCooldown,
+    );
+
+    if (verified == true && mounted) {
+      setState(() {
+        _isEmailVerified = true;
+        _hasEmailOtpSent = true;
+        _localError = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email address verified successfully!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _showEmailOtpModal({bool forceResend = false}) async {
     final email = _emailController.text.trim();
     if (email.isEmpty || !RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email)) {
       setState(() {
@@ -570,6 +600,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return false;
     }
 
+    // If OTP was already sent and user clicked "Enter OTP", open sheet directly without requesting new code!
+    if (_hasEmailOtpSent && !forceResend) {
+      return await _openEmailOtpSheet();
+    }
+
     final state = Provider.of<AppState>(context, listen: false);
     state.clearAuthError();
     setState(() {
@@ -581,9 +616,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return false;
     setState(() {
       _isSendingEmailOtp = false;
+      _hasEmailOtpSent = true;
     });
 
     if (sendRes['success'] != true) {
+      final cooldown = (sendRes['retryAfterSeconds'] as int?) ?? 30;
+      // If code was already sent recently (429 cooldown), still open the sheet!
+      if (sendRes['retryAfterSeconds'] != null || (sendRes['error']?.toString().contains('wait') ?? false)) {
+        return await _openEmailOtpSheet(initialCooldown: cooldown);
+      }
       setState(() {
         _localError = sendRes['error'] ?? 'Unable to send verification code to email.';
       });
@@ -591,22 +632,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
+    return await _openEmailOtpSheet(initialCooldown: cooldown);
+  }
 
+  Future<bool> _openPhoneOtpSheet({int initialCooldown = 30}) async {
+    final phone = _phoneController.text.trim();
+    final phoneValidation = SecurityAuthService.normalizeIndianPhone(phone);
+    final cleanPhone = phoneValidation.normalized ?? phone;
     final verified = await OtpVerificationSheet.show(
       context: context,
-      type: OtpVerificationType.email,
-      destination: email,
-      initialCooldownSeconds: cooldown,
+      type: OtpVerificationType.phone,
+      destination: cleanPhone,
+      maskedDestination: SecurityAuthService.maskPhone(cleanPhone),
+      initialCooldownSeconds: initialCooldown,
     );
 
     if (verified == true && mounted) {
       setState(() {
-        _isEmailVerified = true;
+        _isPhoneVerified = true;
+        _hasPhoneOtpSent = true;
         _localError = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Email address verified successfully!'),
+          content: Text('Mobile phone verified successfully!'),
           backgroundColor: AppTheme.success,
         ),
       );
@@ -615,7 +664,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return false;
   }
 
-  Future<bool> _showPhoneOtpModal() async {
+  Future<bool> _showPhoneOtpModal({bool forceResend = false}) async {
     final phone = _phoneController.text.trim();
     final phoneValidation = SecurityAuthService.normalizeIndianPhone(phone);
     if (!phoneValidation.isValid) {
@@ -626,6 +675,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     final cleanPhone = phoneValidation.normalized!;
+    if (_hasPhoneOtpSent && !forceResend) {
+      return await _openPhoneOtpSheet();
+    }
+
     final state = Provider.of<AppState>(context, listen: false);
     state.clearAuthError();
     setState(() {
@@ -637,23 +690,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return false;
     setState(() {
       _isSendingOtp = false;
+      _hasPhoneOtpSent = true;
     });
 
     if (sendRes['success'] != true) {
+      final cooldown = (sendRes['retryAfterSeconds'] as int?) ?? 30;
+      if (sendRes['retryAfterSeconds'] != null || (sendRes['error']?.toString().contains('wait') ?? false)) {
+        return await _openPhoneOtpSheet(initialCooldown: cooldown);
+      }
       setState(() {
         _localError = sendRes['error'] ?? 'Unable to send verification SMS.';
       });
       return false;
     }
 
-    final masked = sendRes['maskedPhone'] as String? ?? SecurityAuthService.maskPhone(cleanPhone);
     final cooldown = (sendRes['resendCooldownSeconds'] as int?) ?? 30;
-
-    final verified = await OtpVerificationSheet.show(
-      context: context,
-      type: OtpVerificationType.phone,
-      destination: cleanPhone,
-      maskedDestination: masked,
+    return await _openPhoneOtpSheet(initialCooldown: cooldown);
+  }
       initialCooldownSeconds: cooldown,
     );
 
@@ -865,11 +918,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ],
                             ),
                           )
-                        : TextButton(
-                            onPressed: _isSendingEmailOtp ? null : _showEmailOtpModal,
-                            child: _isSendingEmailOtp
-                                ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Send OTP', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_hasEmailOtpSent)
+                                TextButton(
+                                  onPressed: () => _openEmailOtpSheet(),
+                                  child: const Text('Enter OTP', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              TextButton(
+                                onPressed: _isSendingEmailOtp ? null : () => _showEmailOtpModal(forceResend: _hasEmailOtpSent),
+                                child: _isSendingEmailOtp
+                                    ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : Text(_hasEmailOtpSent ? 'Resend' : 'Send OTP',
+                                        style: TextStyle(
+                                          color: _hasEmailOtpSent ? const Color(0xFF94A3B8) : AppTheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        )),
+                              ),
+                            ],
                           ),
                     helperText: _emailValidationNotice ?? 'Temporary/throwaway emails are strictly rejected.',
                     helperStyle: TextStyle(
@@ -922,11 +990,26 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ],
                             ),
                           )
-                        : TextButton(
-                            onPressed: _isSendingOtp ? null : _showPhoneOtpModal,
-                            child: _isSendingOtp
-                                ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Text('Send OTP', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_hasPhoneOtpSent)
+                                TextButton(
+                                  onPressed: () => _openPhoneOtpSheet(),
+                                  child: const Text('Enter OTP', style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                                ),
+                              TextButton(
+                                onPressed: _isSendingOtp ? null : () => _showPhoneOtpModal(forceResend: _hasPhoneOtpSent),
+                                child: _isSendingOtp
+                                    ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : Text(_hasPhoneOtpSent ? 'Resend' : 'Send OTP',
+                                        style: TextStyle(
+                                          color: _hasPhoneOtpSent ? const Color(0xFF94A3B8) : AppTheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        )),
+                              ),
+                            ],
                           ),
                     filled: true,
                     fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
