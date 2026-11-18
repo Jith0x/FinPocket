@@ -310,29 +310,31 @@ $paySection''';
                   Row(
                     children: [
                       Expanded(
-                        flex: 3,
+                        flex: 5,
                         child: TextField(
                           controller: _titleController,
                           decoration: InputDecoration(
                             labelText: 'Bill For / Place',
-                            hintText: 'e.g. Dinner, Movie',
+                            hintText: 'e.g. Dinner',
                             prefixIcon: const Icon(Icons.receipt_long_rounded, size: 18),
                             isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
-                        flex: 2,
+                        flex: 4,
                         child: TextField(
                           controller: _amountController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText: 'Total Bill (₹)',
-                            prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18),
+                            labelText: 'Total (₹)',
+                            prefixText: '₹ ',
                             isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onChanged: (_) => setState(() {}),
@@ -382,9 +384,10 @@ $paySection''';
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                   style: IconButton.styleFrom(
                                     backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                    padding: const EdgeInsets.all(8),
+                                    padding: EdgeInsets.zero,
                                   ),
                                   icon: const Icon(Icons.remove_rounded, size: 16),
                                   onPressed: _membersCount > 2
@@ -392,16 +395,17 @@ $paySection''';
                                       : null,
                                 ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
                                   child: Text(
                                     '$_membersCount',
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppTheme.primary),
+                                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: AppTheme.primary),
                                   ),
                                 ),
                                 IconButton(
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                                   style: IconButton.styleFrom(
                                     backgroundColor: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                                    padding: const EdgeInsets.all(8),
+                                    padding: EdgeInsets.zero,
                                   ),
                                   icon: const Icon(Icons.add_rounded, size: 16),
                                   onPressed: _membersCount < 20

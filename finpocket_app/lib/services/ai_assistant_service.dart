@@ -126,7 +126,7 @@ class AIAssistantService {
             bills: state.bills,
             goals: state.goals,
           );
-          return 'Spend Guard Verdict: ${eval.verdictTitle.toUpperCase()} for ₹${amount.toInt()}.\n${eval.explanation} Remaining Safe-to-Spend: ₹${eval.remainingSafeToSpend.toStringAsFixed(0)}.';
+          return 'Spend Guard Verdict: ${eval.verdictTitle.toUpperCase()} for ₹${amount.isFinite ? amount.toInt() : 0}.\n${eval.explanation} Remaining Safe-to-Spend: ₹${eval.remainingSafeToSpend.toStringAsFixed(0)}.';
         }
       }
       return 'Your current Safe-to-Spend estimate is ₹${state.safeToSpend.safeToSpend.toStringAsFixed(0)} (Available balance: ₹${state.totalAvailableBalance.toStringAsFixed(0)} minus upcoming commitments).';

@@ -173,9 +173,9 @@ class TtsService {
     required String name,
     int? remainingDays,
   }) {
-    final b = balance.toInt();
-    final s = safeToSpend.toInt();
-    final em = emergencyFund.toInt();
+    final b = balance.isFinite ? balance.toInt() : 0;
+    final s = safeToSpend.isFinite ? safeToSpend.toInt() : 0;
+    final em = emergencyFund.isFinite ? emergencyFund.toInt() : 0;
     final now = DateTime.now();
     final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
     final daysLeft = remainingDays ?? (daysInMonth - now.day + 1);
@@ -204,7 +204,7 @@ class TtsService {
     required SupportedLanguage lang,
     required double balance,
   }) {
-    final b = balance.toInt();
+    final b = balance.isFinite ? balance.toInt() : 0;
     switch (lang) {
       case SupportedLanguage.te:
         return 'చెల్లింపుల విభాగం. మీ అందుబాటులో ఉన్న బ్యాలెన్స్ ₹$b. డబ్బు పంపడానికి యూపీఐ ఐడీ లేదా మొబైల్ నంబర్ నమోదు చేసి, మొత్తాన్ని ధృవీకరించండి.';
@@ -230,7 +230,7 @@ class TtsService {
     required double amount,
     required String recipient,
   }) {
-    final a = amount.toInt();
+    final a = amount.isFinite ? amount.toInt() : 0;
     switch (lang) {
       case SupportedLanguage.te:
         return 'చెల్లింపు పూర్తయింది. $recipient కి ₹$a విజయవంతంగా చెల్లించబడింది. రసీదు భద్రపరచబడింది.';
@@ -258,7 +258,7 @@ class TtsService {
     required String party,
     required bool isCredit,
   }) {
-    final a = amount.toInt();
+    final a = amount.isFinite ? amount.toInt() : 0;
     final p = party.trim().isEmpty ? (isCredit ? 'Sender' : 'Merchant') : party.trim();
     if (isCredit) {
       switch (lang) {
@@ -307,8 +307,8 @@ class TtsService {
     required double target,
     required bool isLocked,
   }) {
-    final c = current.toInt();
-    final t = target.toInt();
+    final c = current.isFinite ? current.toInt() : 0;
+    final t = target.isFinite ? target.toInt() : 0;
     switch (lang) {
       case SupportedLanguage.te:
         final lockStatus = isLocked ? 'లాక్ చేయబడింది' : 'అన్‌లాక్ చేయబడింది';
@@ -365,8 +365,8 @@ class TtsService {
     required double safeToSpend,
     required String name,
   }) {
-    final b = balance.toInt();
-    final s = safeToSpend.toInt();
+    final b = balance.isFinite ? balance.toInt() : 0;
+    final s = safeToSpend.isFinite ? safeToSpend.toInt() : 0;
 
     switch (lang) {
       case SupportedLanguage.te:
@@ -485,8 +485,8 @@ class TtsService {
     double? balance,
     double? safeToSpend,
   }) {
-    final b = balance?.toInt() ?? 0;
-    final s = safeToSpend?.toInt() ?? 0;
+    final b = (balance != null && balance.isFinite) ? balance.toInt() : 0;
+    final s = (safeToSpend != null && safeToSpend.isFinite) ? safeToSpend.toInt() : 0;
 
     switch (featureKey) {
       case 'safe_to_spend':

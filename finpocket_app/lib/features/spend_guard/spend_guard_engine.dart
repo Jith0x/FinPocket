@@ -24,13 +24,26 @@ class SpendGuardEngine {
 
     final runwayBefore = twin.runwayDays;
     final projectedLiquid = twin.currentLiquidBalance - requestedAmount;
-    final runwayAfter = math.max(0, (projectedLiquid / twin.dailyBurnRate).round());
+    int runwayAfter;
+    if (twin.dailyBurnRate <= 0) {
+      runwayAfter = projectedLiquid > 0 ? 365 : 0;
+    } else {
+      final ratio = projectedLiquid / twin.dailyBurnRate;
+      if (ratio.isInfinite || ratio.isNaN) {
+        runwayAfter = projectedLiquid > 0 ? 365 : 0;
+      } else {
+        runwayAfter = math.max(0, ratio.round());
+      }
+    }
     final runwayDelta = runwayAfter - runwayBefore;
 
     final List<String> impactedGoals = [];
     if (requestedAmount > (twin.currentLiquidBalance * 0.15)) {
       for (final g in goals) {
-        impactedGoals.add('${g.title} (may delay by ~${(requestedAmount / math.max(300, twin.safeToSpendDaily)).round()} days)');
+        final dailyDivisor = math.max(300.0, twin.safeToSpendDaily);
+        final ratio = requestedAmount / dailyDivisor;
+        final delay = (ratio.isInfinite || ratio.isNaN) ? 0 : ratio.round();
+        impactedGoals.add('${g.title} (may delay by ~$delay days)');
       }
     }
 

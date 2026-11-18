@@ -51,7 +51,7 @@ class _SpendGuardSheetState extends State<SpendGuardSheet> {
     super.initState();
     _amount = widget.initialAmount ?? 3500.0;
     _selectedCategory = widget.initialCategory ?? 'Shopping';
-    _amountCtrl = TextEditingController(text: _amount.toInt().toString());
+    _amountCtrl = TextEditingController(text: _amount.isFinite ? _amount.toInt().toString() : '3500');
   }
 
   @override
@@ -63,7 +63,7 @@ class _SpendGuardSheetState extends State<SpendGuardSheet> {
   void _addAmount(double increment) {
     setState(() {
       _amount += increment;
-      _amountCtrl.text = _amount.toInt().toString();
+      _amountCtrl.text = _amount.isFinite ? _amount.toInt().toString() : '0';
     });
   }
 

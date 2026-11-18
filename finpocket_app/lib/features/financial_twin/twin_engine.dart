@@ -66,11 +66,13 @@ class FinancialTwinEngine {
       runwayDays = liquidBalance > 0 ? 365 : 0;
     } else if (netDailyCashFlow >= 0) {
       // Cash flow positive: runway exceeds 1 year based on current balance
-      runwayDays = math.min(365, (liquidBalance / dailyBurnRate).round());
+      final ratio = liquidBalance / dailyBurnRate;
+      runwayDays = (ratio.isInfinite || ratio.isNaN) ? 365 : math.min(365, ratio.round());
       if (runwayDays < 90) runwayDays = 120;
     } else {
       // Burn is faster than income
-      runwayDays = math.max(7, (liquidBalance / dailyBurnRate).round());
+      final ratio = liquidBalance / dailyBurnRate;
+      runwayDays = (ratio.isInfinite || ratio.isNaN) ? 365 : math.max(7, ratio.round());
     }
 
     // 6. Liquidity Risk Tier
@@ -173,7 +175,17 @@ class FinancialTwinEngine {
     }
 
     // Recompute runway
-    int projectedRunwayDays = math.max(1, (projectedLiquid / projectedBurn).round());
+    int projectedRunwayDays;
+    if (projectedBurn <= 0) {
+      projectedRunwayDays = projectedLiquid > 0 ? 365 : 0;
+    } else {
+      final ratio = projectedLiquid / projectedBurn;
+      if (ratio.isInfinite || ratio.isNaN) {
+        projectedRunwayDays = projectedLiquid > 0 ? 365 : 0;
+      } else {
+        projectedRunwayDays = math.max(1, ratio.round());
+      }
+    }
     int runwayDeltaDays = projectedRunwayDays - baseline.runwayDays;
 
     LiquidityRiskTier projectedRisk;
@@ -193,7 +205,9 @@ class FinancialTwinEngine {
     for (final goal in goals) {
       if (scenario.amount > (baseline.currentLiquidBalance * 0.2)) {
         // Significant purchase causes delay
-        final estimatedDaysDelay = math.min(180, (scenario.amount / math.max(500, baseline.safeToSpendDaily)).round());
+        final dailyDivisor = math.max(500.0, baseline.safeToSpendDaily);
+        final ratio = scenario.amount / dailyDivisor;
+        final estimatedDaysDelay = (ratio.isInfinite || ratio.isNaN) ? 0 : math.min(180, ratio.round());
         final originalDate = goal.targetDate;
         final newDate = originalDate.add(Duration(days: estimatedDaysDelay));
 

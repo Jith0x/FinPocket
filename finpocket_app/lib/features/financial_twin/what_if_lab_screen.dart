@@ -58,7 +58,7 @@ class _WhatIfLabScreenState extends State<WhatIfLabScreen> {
         case 'custom':
           break;
       }
-      _amountController.text = _customAmount.toInt().toString();
+      _amountController.text = _customAmount.isFinite ? _customAmount.toInt().toString() : '1000';
     });
   }
 
@@ -330,7 +330,7 @@ class _WhatIfLabScreenState extends State<WhatIfLabScreen> {
             children: [
               const Text('Scenario Parameters', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Text(
-                '₹${_customAmount.toInt()}',
+                '₹${_customAmount.isFinite ? _customAmount.toInt() : 1000}',
                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.primary),
               ),
             ],
@@ -346,16 +346,16 @@ class _WhatIfLabScreenState extends State<WhatIfLabScreen> {
           ),
           const SizedBox(height: 12),
           Slider(
-            value: _customAmount.clamp(1000.0, 250000.0),
+            value: _customAmount.isFinite ? _customAmount.clamp(1000.0, 250000.0) : 1000.0,
             min: 1000.0,
             max: 250000.0,
             divisions: 249,
             activeColor: AppTheme.primary,
-            label: '₹${_customAmount.toInt()}',
+            label: '₹${_customAmount.isFinite ? _customAmount.toInt() : 1000}',
             onChanged: (val) {
               setState(() {
                 _customAmount = val;
-                _amountController.text = val.toInt().toString();
+                _amountController.text = val.isFinite ? val.toInt().toString() : '1000';
               });
             },
           ),

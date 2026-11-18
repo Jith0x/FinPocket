@@ -157,7 +157,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        spentPct != null
+                        (spentPct != null && spentPct.isFinite)
                             ? '${spentPct.round()}%'
                             : AnalyticsScreenStateUtils.rupees(last.expenses),
                         style: TextStyle(
@@ -454,7 +454,7 @@ class _CategoryCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${sharePct.round()}%',
+                '${sharePct.isFinite ? sharePct.round() : 0}%',
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
