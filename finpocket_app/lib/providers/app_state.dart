@@ -1219,28 +1219,29 @@ class AppState extends ChangeNotifier {
       final savedTarget = prefs.getDouble('fp_emergency_fund_target_amount_$uid');
       final auditJsonList = prefs.getStringList('fp_emergency_fund_audits_$uid') ?? const [];
 
-      _emergencyFund.userId = uid;
-      if (savedAmount != null) {
-        _emergencyFund.currentAmount = savedAmount;
-      }
-      if (savedTarget != null && savedTarget > 0) {
-        _emergencyFund.targetAmount = savedTarget;
-      }
-      _emergencyFund.auditLog.clear();
+      final loadedAudits = <EmergencyFundAudit>[];
       if (auditJsonList.isNotEmpty) {
-        final loadedAudits = auditJsonList.map((s) {
+        for (final s in auditJsonList) {
           final m = jsonDecode(s) as Map<String, dynamic>;
-          return EmergencyFundAudit(
+          loadedAudits.add(EmergencyFundAudit(
             id: m['id']?.toString() ?? '',
             action: m['action']?.toString() ?? 'DEPOSIT',
             amount: (m['amount'] as num?)?.toDouble(),
             timestamp: DateTime.tryParse(m['timestamp']?.toString() ?? '') ?? DateTime.now(),
             reason: m['reason']?.toString() ?? '',
-          );
-        }).toList();
-
-        _emergencyFund.auditLog.addAll(loadedAudits);
+          ));
+        }
       }
+
+      _emergencyFund = EmergencyFund(
+        id: _emergencyFund.id,
+        userId: uid,
+        targetAmount: (savedTarget != null && savedTarget > 0) ? savedTarget : _emergencyFund.targetAmount,
+        currentAmount: savedAmount ?? _emergencyFund.currentAmount,
+        monthlyContribution: _emergencyFund.monthlyContribution,
+        isLocked: _emergencyFund.isLocked,
+        auditLog: loadedAudits,
+      );
     } catch (e) {
       debugPrint('[AppState] Failed loading emergency fund: $e');
     }
@@ -2629,7 +2630,7 @@ class AppState extends ChangeNotifier {
     _savingsGoals.clear();
     _bills.clear();
     _emis.clear();
-    _creditCards.clear();
+    _creditCardStatements.clear();
     _auditLogs.clear();
     _devices.clear();
     _safeToSpend = SafeToSpendData();
@@ -2638,8 +2639,9 @@ class AppState extends ChangeNotifier {
     _insights.clear();
     _upcomingPayments.clear();
     _pendingPayments.clear();
-    _appNotifications.clear();
-    _streakData = StreakData();
+    _notifications.clear();
+    _badges.clear();
+    _streakData = NoSpendStreakData();
     _isBalanceSmsMirrored = false;
     _smsReportedBalance = null;
     _smsReportedBank = null;
