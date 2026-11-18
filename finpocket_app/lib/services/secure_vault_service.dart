@@ -135,6 +135,24 @@ class SecureVaultService {
     _unlockedPinFingerprint = null;
   }
 
+  /// Completely wipes local vault storage (all encrypted blobs, salt, metadata)
+  /// and locks the vault so no data from a previous account persists.
+  Future<void> wipeVault() async {
+    lock();
+    try {
+      final base = debugBaseDirectory != null
+          ? Directory(debugBaseDirectory!)
+          : await getApplicationDocumentsDirectory();
+      final root = Directory('${base.path}/$_dirName');
+      if (await root.exists()) {
+        await root.delete(recursive: true);
+      }
+      _vaultRoot = null;
+    } catch (e) {
+      debugPrint('[SecureVaultService] wipeVault error: $e');
+    }
+  }
+
   /// Proves [key] opens this vault. On first use it seals a version marker
   /// with [key] so every later unlock can verify the PIN really is correct.
   Future<bool> _selfTest(SecretKey key) async {

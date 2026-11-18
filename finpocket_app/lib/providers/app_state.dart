@@ -1162,16 +1162,19 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadPersistedGoals() async {
     try {
+      final currentUid = _currentUser?.userId;
+      if (currentUid == null || currentUid.isEmpty) {
+        _savingsGoals.clear();
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getStringList(_prefGoalsKey) ?? const [];
       final parsed = raw
           .map((s) => SavingsGoal.fromJson(jsonDecode(s) as Map<String, dynamic>))
           .toList();
-      if (parsed.isNotEmpty) {
-        _savingsGoals
-          ..clear()
-          ..addAll(parsed);
-      }
+      _savingsGoals
+        ..clear()
+        ..addAll(parsed.where((g) => g.userId == currentUid));
     } catch (e) {
       debugPrint('[AppState] Failed loading savings goals: $e');
     }
@@ -1179,9 +1182,11 @@ class AppState extends ChangeNotifier {
 
   Future<void> _persistEmergencyFund() async {
     try {
+      final uid = _currentUser?.userId;
+      if (uid == null || uid.isEmpty) return;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble('fp_emergency_fund_current_amount', _emergencyFund.currentAmount);
-      await prefs.setDouble('fp_emergency_fund_target_amount', _emergencyFund.targetAmount);
+      await prefs.setDouble('fp_emergency_fund_current_amount_$uid', _emergencyFund.currentAmount);
+      await prefs.setDouble('fp_emergency_fund_target_amount_$uid', _emergencyFund.targetAmount);
       final auditJsonList = _emergencyFund.auditLog.map((a) => jsonEncode({
         'id': a.id,
         'action': a.action,
@@ -1189,7 +1194,7 @@ class AppState extends ChangeNotifier {
         'timestamp': a.timestamp.toIso8601String(),
         'reason': a.reason,
       })).toList();
-      await prefs.setStringList('fp_emergency_fund_audits', auditJsonList);
+      await prefs.setStringList('fp_emergency_fund_audits_$uid', auditJsonList);
     } catch (e) {
       debugPrint('[AppState] Failed persisting emergency fund: $e');
     }
@@ -1197,17 +1202,31 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadPersistedEmergencyFund() async {
     try {
+      final uid = _currentUser?.userId;
+      if (uid == null || uid.isEmpty) {
+        _emergencyFund = EmergencyFund(
+          id: 'emf_default',
+          userId: '',
+          targetAmount: 100000.0,
+          currentAmount: 0.0,
+          monthlyContribution: 0.0,
+          auditLog: [],
+        );
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
-      final savedAmount = prefs.getDouble('fp_emergency_fund_current_amount');
-      final savedTarget = prefs.getDouble('fp_emergency_fund_target_amount');
-      final auditJsonList = prefs.getStringList('fp_emergency_fund_audits') ?? const [];
+      final savedAmount = prefs.getDouble('fp_emergency_fund_current_amount_$uid');
+      final savedTarget = prefs.getDouble('fp_emergency_fund_target_amount_$uid');
+      final auditJsonList = prefs.getStringList('fp_emergency_fund_audits_$uid') ?? const [];
 
-      if (savedAmount != null && savedAmount > 0) {
-        _emergencyFund.currentAmount = math.max(_emergencyFund.currentAmount, savedAmount);
+      _emergencyFund.userId = uid;
+      if (savedAmount != null) {
+        _emergencyFund.currentAmount = savedAmount;
       }
       if (savedTarget != null && savedTarget > 0) {
         _emergencyFund.targetAmount = savedTarget;
       }
+      _emergencyFund.auditLog.clear();
       if (auditJsonList.isNotEmpty) {
         final loadedAudits = auditJsonList.map((s) {
           final m = jsonDecode(s) as Map<String, dynamic>;
@@ -1220,13 +1239,7 @@ class AppState extends ChangeNotifier {
           );
         }).toList();
 
-        final existingIds = _emergencyFund.auditLog.map((a) => a.id).toSet();
-        for (final a in loadedAudits) {
-          if (!existingIds.contains(a.id)) {
-            _emergencyFund.auditLog.add(a);
-            existingIds.add(a.id);
-          }
-        }
+        _emergencyFund.auditLog.addAll(loadedAudits);
       }
     } catch (e) {
       debugPrint('[AppState] Failed loading emergency fund: $e');
@@ -1653,13 +1666,14 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Persist vault document metadata. (Documents added via `addDocument` were
-  /// never saved, so every uploaded document silently vanished on app restart.)
+  /// Persist vault document metadata per user account.
   Future<void> _persistDocuments() async {
     try {
+      final uid = _currentUser?.userId;
+      if (uid == null || uid.isEmpty) return;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
-        'fp_vault_docs',
+        'fp_vault_docs_$uid',
         _documents
             .where((d) => !d.id.startsWith('doc_aadhaar') && !d.id.startsWith('doc_pan') && !d.id.startsWith('doc_passport'))
             .map((d) => jsonEncode(d.toJson()))
@@ -1672,18 +1686,18 @@ class AppState extends ChangeNotifier {
 
   Future<void> _loadPersistedDocuments() async {
     try {
+      _documents.clear();
+      final uid = _currentUser?.userId;
+      if (uid == null || uid.isEmpty) {
+        return;
+      }
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getStringList('fp_vault_docs') ?? const [];
+      final raw = prefs.getStringList('fp_vault_docs_$uid') ?? const [];
       final parsed = raw
           .map((s) => DocumentItem.fromJson(jsonDecode(s) as Map<String, dynamic>))
           .toList();
       if (parsed.isNotEmpty) {
-        // Insert user documents after the demo seed entries (which are only
-        // present in demo mode) without duplicating any already-loaded doc.
-        final existingIds = _documents.map((d) => d.id).toSet();
-        for (final doc in parsed) {
-          if (!existingIds.contains(doc.id)) _documents.add(doc);
-        }
+        _documents.addAll(parsed);
       }
     } catch (e) {
       debugPrint('[AppState] Failed loading vault documents: $e');
@@ -2104,6 +2118,7 @@ class AppState extends ChangeNotifier {
       // Defense-in-depth: wipe any previous user's cached data before
       // fetching the new user's. Covers force-kills that skip logout.
       await clearAllLocalUserData();
+      _resetInMemoryState();
 
       final res = await ApiService.login(email, password);
       if (res['user'] != null) {
@@ -2136,6 +2151,7 @@ class AppState extends ChangeNotifier {
       // Defense-in-depth: wipe any previous user's cached data before
       // fetching the new user's. Covers force-kills that skip logout.
       await clearAllLocalUserData();
+      _resetInMemoryState();
 
       final googleResult = await SecurityAuthService.authenticateGoogle(
         promptAccountChooser: promptAccountChooser,
@@ -2490,8 +2506,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Defense-in-depth: wipe any previous user's cached data
+      // Defense-in-depth: wipe any previous user's cached data and memory
       await clearAllLocalUserData();
+      _resetInMemoryState();
 
       final res = await ApiService.register(name, email, password, phone: phone);
       if (res['user'] != null) {
@@ -2553,11 +2570,6 @@ class AppState extends ChangeNotifier {
   /// ──────────────────────────────────────────────────────────────────────
   static Future<void> clearAllLocalUserData() async {
     // 1. Locally cached bank transactions (the primary leak vector).
-    //
-    // Each stage is isolated on purpose: a local-storage fault must never
-    // abort an authentication attempt. The wipe still runs as far as it can,
-    // and the caller is told about it through the debug log instead of a
-    // misleading "Something went wrong" login failure.
     try {
       await LocalTransactionStorageService.clearLocalTransactions();
     } catch (e) {
@@ -2572,42 +2584,75 @@ class AppState extends ChangeNotifier {
       debugPrint('[AppState] clearSecureStorage error: $e');
     }
 
-    // 3. SharedPreferences: every user-scoped key the app persists.
+    // 3. Encrypted Personal Document Vault blobs and salt
+    try {
+      await SecureVaultService.instance.wipeVault();
+    } catch (e) {
+      debugPrint('[AppState] wipeVault error: $e');
+    }
+
+    // 4. SharedPreferences: every user-scoped key the app persists.
     try {
       final prefs = await SharedPreferences.getInstance();
-      final keysToRemove = <String>[
-        // SMS-reported bank balance overlay
-        'finpocket_sms_reported_balance_v1',
-        'finpocket_sms_reported_balance_bank_v1',
-        'finpocket_sms_reported_balance_at_v1',
-        // Financial products
-        'finpocket_emis_v1',
-        'finpocket_savings_goals_v1',
-        'fp_credit_cards',
-        'finpocket_min_budget_floor_v1',
-        // Gamification & notifications
-        'fp_streak_data',
-        'finpocket_app_notifications_v1',
-        'finpocket_notified_credit_ids_v1',
-        // Round-up vault
-        'fp_roundups_total',
-        'fp_roundups_count',
-        // Preferences that describe a person, not the device
-        'fp_stealth_mode',
-        'fp_soundbox_enabled',
-        // User-specific app state
-        'finpocket_whatsapp_number_v1',
-        'fp_ghost_subscriptions',
-        'finpocket_profile_onboarded_v1',
-        'finpocket_user_pay_income_v1',
-        'finpocket_user_pay_spend_limit_v1',
-      ];
-      for (final key in keysToRemove) {
-        await prefs.remove(key);
+      final allKeys = prefs.getKeys().toList();
+      for (final key in allKeys) {
+        if (key.startsWith('fp_') ||
+            key.startsWith('finpocket_') ||
+            key.contains('emergency_fund') ||
+            key.contains('vault_docs')) {
+          // Keep hardware device UUID and theme preference
+          if (key != 'finpocket_device_uuid_v1' && key != 'theme_mode') {
+            await prefs.remove(key);
+          }
+        }
       }
     } catch (e) {
       debugPrint('[AppState] clearAllLocalUserData prefs error: $e');
     }
+  }
+
+  void _resetInMemoryState() {
+    _currentUser = null;
+    _isDemoMode = false;
+    _documents.clear();
+    _emergencyFund = EmergencyFund(
+      id: 'emf_clean',
+      userId: '',
+      targetAmount: 100000.0,
+      currentAmount: 0.0,
+      monthlyContribution: 0.0,
+      auditLog: [],
+      isLocked: false,
+    );
+    _transactions.clear();
+    _bankAccounts.clear();
+    _savingsGoals.clear();
+    _bills.clear();
+    _emis.clear();
+    _creditCards.clear();
+    _auditLogs.clear();
+    _devices.clear();
+    _safeToSpend = SafeToSpendData();
+    _commitments = CommittedMoneyData();
+    _dailyBrief = DailyFinancialBriefData();
+    _insights.clear();
+    _upcomingPayments.clear();
+    _pendingPayments.clear();
+    _appNotifications.clear();
+    _streakData = StreakData();
+    _isBalanceSmsMirrored = false;
+    _smsReportedBalance = null;
+    _smsReportedBank = null;
+    _smsReportedAt = null;
+    _accumulatedRoundUps = 0.0;
+    _roundUpTransactionsCount = 0;
+    _minBudgetFloorOverride = 0.0;
+    _userPayIncome = null;
+    _userPaySpendLimit = null;
+    _isLoaded = false;
+    _isCached = false;
+    _hasError = false;
+    _errorMessage = null;
   }
 
   Future<void> logout() async {
@@ -2622,31 +2667,7 @@ class AppState extends ChangeNotifier {
       // Wipe every trace of this user's data from the device BEFORE dropping
       // the in-memory state, so a fast login can never read stale rows.
       await clearAllLocalUserData();
-
-      _currentUser = null;
-      _isDemoMode = false;
-      _transactions.clear();
-      _bankAccounts.clear();
-      _savingsGoals.clear();
-      _auditLogs.clear();
-      _devices.clear();
-      _safeToSpend = SafeToSpendData();
-      _commitments = CommittedMoneyData();
-      _dailyBrief = DailyFinancialBriefData();
-      _insights.clear();
-      _upcomingPayments.clear();
-      _pendingPayments.clear();
-      _isBalanceSmsMirrored = false;
-      _smsReportedBalance = null;
-      _smsReportedBank = null;
-      _smsReportedAt = null;
-      _accumulatedRoundUps = 0.0;
-      _roundUpTransactionsCount = 0;
-      _minBudgetFloorOverride = 0.0;
-      _isLoaded = false;
-      _isCached = false;
-      _hasError = false;
-      _errorMessage = null;
+      _resetInMemoryState();
       _isLoading = false;
       notifyListeners();
     }
@@ -2818,9 +2839,12 @@ class AppState extends ChangeNotifier {
           .toList();
 
       if (serverGoals.isNotEmpty) {
+        final currentUid = _currentUser?.userId ?? '';
         final merged = <String, SavingsGoal>{};
         for (final local in _savingsGoals) {
-          merged[local.id] = local;
+          if (local.userId == currentUid) {
+            merged[local.id] = local;
+          }
         }
         for (final remote in serverGoals) {
           final existing = merged[remote.id];
@@ -2849,28 +2873,24 @@ class AppState extends ChangeNotifier {
         }
         _savingsGoals = merged.values.toList();
         _persistGoals();
+      } else {
+        _savingsGoals.clear();
+        _persistGoals();
       }
 
-      // 7. Emergency Fund — merged, never wiped out
+      // 7. Emergency Fund — authoritative from server for current user
       final ef = overview['emergencyFund'];
       if (ef != null) {
-        List<EmergencyFundAudit> audits = List<EmergencyFundAudit>.from(_emergencyFund.auditLog);
         final rawAudits = (ef['auditLog'] ?? ef['audits']) as List<dynamic>?;
+        List<EmergencyFundAudit> audits = [];
         if (rawAudits != null && rawAudits.isNotEmpty) {
-          final serverAudits = rawAudits.map((a) => EmergencyFundAudit(
+          audits = rawAudits.map((a) => EmergencyFundAudit(
             id: a['id']?.toString() ?? '',
             action: a['action']?.toString() ?? 'DEPOSIT',
             amount: (a['amount'] as num?)?.toDouble(),
             timestamp: DateTime.tryParse(a['created_at']?.toString() ?? '') ?? DateTime.now(),
             reason: a['reason']?.toString() ?? '',
           )).toList();
-          final auditIds = serverAudits.map((a) => a.id).toSet();
-          for (final localA in audits) {
-            if (!auditIds.contains(localA.id)) {
-              serverAudits.insert(0, localA);
-            }
-          }
-          audits = serverAudits;
         }
 
         final serverAmt = (ef['currentAmount'] as num?)?.toDouble() ?? 0.0;
@@ -2879,10 +2899,10 @@ class AppState extends ChangeNotifier {
         _emergencyFund = EmergencyFund(
           id: 'emf_authoritative',
           userId: _currentUser?.userId ?? '',
-          targetAmount: targetAmt > 0 ? targetAmt : (_emergencyFund.targetAmount > 0 ? _emergencyFund.targetAmount : 100000.0),
-          currentAmount: math.max(_emergencyFund.currentAmount, serverAmt),
+          targetAmount: targetAmt > 0 ? targetAmt : 100000.0,
+          currentAmount: serverAmt,
           isLocked: ef['isLocked'] == true,
-          monthlyContribution: (ef['monthlyContribution'] as num?)?.toDouble() ?? _emergencyFund.monthlyContribution,
+          monthlyContribution: (ef['monthlyContribution'] as num?)?.toDouble() ?? 0.0,
           auditLog: audits,
         );
         unawaited(_persistEmergencyFund());
@@ -2919,6 +2939,7 @@ class AppState extends ChangeNotifier {
       _lastSynced = DateTime.now();
       await _runEmiGuidanceCheckup();
       await _syncServerNotifications();
+      await _loadPersistedDocuments();
       await _checkDailyMotivationQuote();
       // Every successful refresh counts as today's streak check-in; the
       // guard inside makes this a no-op when today was already evaluated.
