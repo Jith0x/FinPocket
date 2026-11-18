@@ -14,7 +14,7 @@ class SplashScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const FinPocketLogo(
-              size: 76,
+              size: 100,
               showText: true,
               subtitle: 'Financial Intelligence & Control',
             ),
